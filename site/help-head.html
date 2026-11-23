@@ -1,0 +1,34 @@
+<!-- The look of sos.stevenpenza.com/help: package.json's askAnswer "head", written by Ask & Answer's corpus.py into
+     the help pages it builds from docs/*.md. The site's palette as the viewer's --doc-* variables, and the shared
+     header bar's style. A fragment only: corpus.py refuses scripts and any address on another origin. -->
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12151d">
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root {
+    --doc-color-scheme: dark;
+    --doc-bg: #0b0d12;
+    --doc-fg: #e8eaef;
+    --doc-muted: #a3abba;
+    --doc-faint: #747d8e;
+    --doc-bar-bg: #12151d;
+    --doc-rule: #262b38;
+    --doc-rule-soft: #1b1f2a;
+    --doc-rule-strong: #343a4a;
+    --doc-code-bg: #181c26;
+    --doc-table-fg: #e8eaef;
+    --doc-folder: #a3abba;
+    --doc-accent: #ffb000;
+    --doc-accent-hover: #ffd27a;
+    --doc-hit: rgba(255, 176, 0, 0.14);
+    --doc-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --doc-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .sf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding: 12px 20px; }
+  .sf-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--doc-fg); font-weight: 700; text-decoration: none; }
+  .sf-nav { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .sf-nav a { color: var(--doc-muted); text-decoration: none; padding: 4px 0; border-bottom: 2px solid transparent; }
+  .sf-nav a:hover, .sf-nav .here { color: var(--doc-fg); border-bottom-color: var(--doc-accent); }
+  .sf-crumb { color: var(--doc-faint); font-size: .9rem; }
+  .sf-crumb:empty { display: none; }
+</style>

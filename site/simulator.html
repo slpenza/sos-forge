@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOS Simulator: SOS Forge</title>
+<meta name="description" content="Preview a Science On a Sphere dataset on a virtual 6-foot sphere, in your browser.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/site.css">
+<script type="module" src="js/simulator.js"></script>
+</head>
+<body class="sim">
+<header class="bar">
+  <a class="brand" href="/"><img src="favicon.svg" alt="" width="22" height="22">SOS Forge</a>
+  <nav aria-label="Site">
+    <a href="/">Datasets</a>
+    <a href="simulator.html" aria-current="page">Simulator</a>
+    <a href="help/">Help</a>
+    <a href="ask.html">Ask</a>
+    <a href="https://github.com/slpenza/sos-forge">GitHub</a>
+  </nav>
+</header>
+<main class="sim-layout">
+  <section id="stage" class="stage" aria-label="Sphere">
+    <canvas id="globe" aria-label="The dataset on a virtual sphere. Drag to walk around it, scroll or pinch to step closer."></canvas>
+    <p id="caption" class="caption" aria-live="off" hidden></p>
+    <p id="status" class="status" hidden></p>
+    <div class="drop-hint" aria-hidden="true">Drop a dataset folder</div>
+    <div class="controls">
+      <div id="transport" class="transport">
+        <button id="play" class="btn" aria-pressed="true">Pause</button>
+        <input id="scrub" type="range" min="0" max="0" step="0.01" value="0" aria-label="Position in the video">
+        <span id="time" class="time">0:00 / 0:00</span>
+      </div>
+      <div class="views" role="group" aria-label="View">
+        <button id="view-orbit" class="btn">Orbit</button>
+        <button id="view-visitor" class="btn" title="Eye level for an adult standing 1.2 m from a 6-foot sphere">Visitor</button>
+        <button id="spin" class="btn" aria-pressed="false">Spin</button>
+        <button id="caption-toggle" class="btn" aria-pressed="true" title="The dataset's labels as a caption that stays put while you move">Caption</button>
+      </div>
+    </div>
+  </section>
+  <aside class="panel">
+    <label class="field">Dataset
+      <select id="dataset"></select>
+    </label>
+    <label class="btn file">Open a dataset folder&hellip;
+      <input id="folder" type="file" webkitdirectory multiple hidden>
+    </label>
+    <p class="hint">Use the folder <code>sos build</code> made. It stays on your computer. Videos must be H.264,
+      from the folder ending in <code>_h264</code>.</p>
+    <h2 id="ds-name">&nbsp;</h2>
+    <p id="ds-desc"></p>
+    <table id="ds-settings" class="settings"></table>
+    <section><h3>Credits</h3><ul id="ds-credits"></ul></section>
+    <section><h3>Licences</h3><ul id="ds-licences"></ul></section>
+    <div id="ds-downloads" class="actions" hidden></div>
+    <p class="hint">A preview, not a stand-in: a real sphere blends four projectors, so brightness and seams differ.</p>
+  </aside>
+</main>
+</body>
+</html>

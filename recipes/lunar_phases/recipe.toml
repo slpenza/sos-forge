@@ -1,0 +1,57 @@
+# 29.5-day synodic lunar cycle: the tidally locked Moon stays still while the Sun circles its equator.
+# sos build lunar_phases --preview   (1024x512 in ~15 s)      sos build lunar_phases   (4096x2048, ~4 min)
+
+[dataset]
+name = "Lunar Phases (29.5-Day Synodic Cycle)"
+slug = "lunar_phases"
+stem = "moon_phases"
+description = "High-resolution Lunar Reconnaissance Orbiter (LRO) visualization showing solar illumination across both the near and far sides of the tidally locked Moon over a 29.5-day cycle."
+output = "movie"
+width = 4096
+credits = ["NASA's Scientific Visualization Studio CGI Moon Kit (https://svs.gsfc.nasa.gov/4720): LRO LROC WAC colour and LOLA elevation (NASA/GSFC/Arizona State University)"]
+license = "NASA imagery is not copyrighted; credit NASA SVS."
+
+[animation]
+frames = 720          # 24 s at 30 fps; the loop never repeats frame 0
+fps = 30
+loop = true
+
+[playlist]
+tiltx = 6.68          # lunar obliquity to its orbit, applied as a display tilt
+animate = 1
+category = "Astronomy"
+majorcategory = "Astronomy"
+subcategory = "Astronomy"
+
+[assets.color]
+url = "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_4k.tif"
+size = 13095388
+sha256 = "918649a7f8ed2f1329b2cd95bb0d25483befdcb60ae1a66db681a637cc21344f"
+
+[assets.elevation]
+url = "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_16.tif"
+size = 66378634
+sha256 = "1ea42bf44f7e9d694f79c3afa7145f97fbf06cc67372067d9fe73dce43bad796"
+
+[[layers]]
+type = "lit_globe"
+color = "color"
+elevation = "elevation"
+elevation_units = "km"         # ldem_16.tif: float km relative to 1737.4 km
+radius_km = 1737.4
+ambient = 0.025                # linear-light floor so the night side stays faintly visible
+relief = 1.0
+shadows = true
+brdf = "lambert"
+sun_start_lon_deg = 180.0      # New Moon: Sun behind the far side
+sun_direction = "west"         # subsolar point moves west: 180 -> +90 (First Quarter) -> 0 (Full) -> -90
+sun_cycles = 1.0
+
+[hud]
+title = "{phase}"
+subtitle = "Day {day:.1f} of 29.5  ·  {lit:.0%} lit"
+icon = "moon_phase"
+progress = true
+progress_ticks = [0.25, 0.5, 0.75]
+anchors = [0, 180]             # near side and far side
+lat = -30

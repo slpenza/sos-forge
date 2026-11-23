@@ -1,0 +1,133 @@
+# sos-forge
+
+Build [NOAA Science On a Sphere](https://sos.noaa.gov) datasets from open data with a short recipe file.
+
+A recipe says *what* to show (a basemap, points, GPS tracks, a sunlit planet), *how* to time it, and what the
+presenter panel says. `sos build` does everything else:
+
+- fetches and caches the data
+- renders seamless 2:1 equirectangular frames in parallel
+- encodes an SOS-compatible MP4 or still image
+- verifies the result: alignment, the ±180° seam, frame count, B-frames and colour tags
+- writes a deployable folder with `playlist.sos` and a README
+
+```bash
+uv venv --python 3.13 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+source .venv/bin/activate
+
+sos list                                   # bundled + local recipes
+sos new "Coffee Shops"                     # scaffold recipes/coffee_shops/ with a sample CSV
+sos build coffee_shops --preview           # 1024x512 in seconds -> dist/coffee_shops_preview/
+sos build coffee_shops                     # 4096x2048 -> dist/coffee_shops/
+sos still lunar_phases 180 --preview       # one PNG for a quick look
+sos check where_the_world_plays            # fetch data + run checks, no rendering
+sos bundle where_the_world_plays           # zip the built folders for a GitHub Release
+sos site --dist dist --serve               # gallery + simulator + help at http://localhost:8040/
+```
+
+Deploy by copying `dist/<slug>/` to `/shared/sos/media/site-custom/<slug>/` on the SOS machine (the generated
+README has the exact commands and checksums).
+
+## The site and the simulator
+
+`sos site` builds the site behind sos.stevenpenza.com:
+- a gallery of the published datasets
+- a **simulator** that plays a dataset on a virtual 6-foot sphere in the browser, following its `playlist.sos`
+  (frame rate, holds, spin, tilt). It has Orbit and Visitor views and a fixed caption, and you can drop in a
+  dataset folder of your own; nothing is uploaded.
+- the help, built by Ask & Answer, with an Ask panel
+
+`infra/` deploys it, but only from a pushed version tag (see design/v0/v0.2.0.md).
+
+Every animation also carries `labels.txt`, one line of text per frame. SOS can draw it as fixed labels around the
+sphere: set `[hud] mode = "labels"`, or switch them on from the iPad.
+
+## Bundled recipes
+
+| Recipe | Output | Data |
+|---|---|---|
+| `lunar_phases` | 24 s loop: the Sun circles the tidally locked Moon over 29.5 days, with relief shading and cast shadows | NASA SVS CGI Moon Kit (LRO LROC + LOLA) |
+| `where_the_world_plays` | 36 s loop spotlighting where eight sports are played | OpenStreetMap via Overpass (ODbL) |
+| `pinball_map` | 20 s growth story: every place to play pinball, appearing on the date it was added | [Pinball Map](https://pinballmap.com) API (CC BY-SA 4.0, token required) |
+| `my_activities` | Still image: your GPS tracks glowing on the globe, with a zoomed inset | Your own GPX/TCX/FIT files (e.g. a fitness app's bulk export) |
+
+## A recipe in 20 lines
+
+```toml
+[dataset]
+name = "Coffee Shops"
+description = "Shown to presenters in the SOS playlist."
+output = "texture"                 # or "movie" with an [animation] table
+credits = ["My survey data"]
+
+[[layers]]
+type = "basemap"
+name = "black_marble"              # NASA night lights via GIBS; or blue_marble, path = "x.jpg", color = "#000000"
+brightness = 0.5
+
+[[layers]]
+type = "points"
+source = { type = "csv", path = "data/places.csv" }
+weight = "visitors"
+color = "#ffb000"
+
+[hud]
+title = "Coffee Shops"
+subtitle = "{count:,} places"
+```
+
+See [docs/recipe-reference.md](docs/recipe-reference.md) for every option, the layer and source types, HUD templates, and how to add
+custom layers in a `recipe.py`.
+
+## How it works
+
+- **Projection.** Pixel centres map to lon = ((x+0.5)/W)·360−180 and lat = 90−((y+0.5)/H)·180. Lon 0 sits at X = W/2.
+  Every blur and resample wraps across ±180° so there is no seam.
+- **Glow on a sphere.** Point and track density uses a Gaussian with a fixed size on the ground. Its horizontal
+  width grows as 1/cos(lat), so dots stay round on the globe at every latitude.
+- **Linear light.** Layers composite in linear light and are encoded to sRGB once.
+- **Presenter HUD.** Panels are drawn flat and warped onto the sphere through a gnomonic projection, so text isn't
+  stretched by latitude. They repeat at configurable longitudes so both sides of the globe can read them.
+- **Caching.** Each layer's heavy arrays are cached per resolution and input fingerprint in `build/`. Downloads are
+  cached in `~/.cache/sosforge` (override with `$SOSFORGE_CACHE`).
+- **Parallelism.** Spawned worker processes memory-map the caches, and a bounded queue feeds ffmpeg.
+- **SOS encoding.** Each movie is rendered once and encoded twice:
+  - **Primary, `dist/<slug>/`:** MPEG-4 Part 2 at 50 Mbps for 4K (never below 25), as NOAA's content guide
+    recommends. The guide warns that H.264 can cause errors in some SOS versions.
+  - **Variant, `dist/<slug>_h264/`:** H.264 Main, CRF 18, with BT.709 tags, so a site can compare both on its
+    sphere.
+
+  Both are yuv420p with no B-frames, a keyframe every second, and `+faststart`. Use `--codec mpeg4` to build only
+  one, or set `[encode] codecs` in a recipe.
+
+## Credits and licences
+
+Every dataset carries the credits and licence notes its sources require, in its `playlist.sos` description and
+its README. [docs/data-sources.md](docs/data-sources.md) lists the sources the bundled recipes use. Downloads are
+cached in `~/.cache/sosforge`, and OpenStreetMap queries are cached for 30 days so a rebuild doesn't repeat them.
+
+## Development and releases
+
+```bash
+git config core.hooksPath tools/hooks   # once per clone: blob-size and scope-doc pre-commit gate
+cp .env.example .env.local              # tokens live here (gitignored); `sos` loads it
+pytest                                  # 116 tests (97 + 19 scope-hook); two use the real Moon maps if cached
+node --test site/js/*.test.mjs          # simulator logic
+(cd infra && npm ci && npm test)        # site stack synth
+```
+
+- Commits go straight to `main` with the subject `vX.Y.Z: <one sentence>.`
+- Every version has a scope doc at `design/v<major>/vX.Y.Z.md` saying what the version decides, what it doesn't,
+  and how it was tested. The doc is committed with its code and bumped by hand in `pyproject.toml` and
+  `sosforge/meta.py`. The pre-commit hook refuses code without a scope doc.
+- Pushes to `main` only run tests (`.github/workflows/test.yml`).
+- **Only a pushed tag releases**:
+  ```bash
+  git tag -a v0.1.0 -m "v0.1.0: <one sentence>"
+  git push origin v0.1.0
+  ```
+  `release.yml` then runs `tools/release.sh` in the `production` environment, the same script you can run by
+  hand. It refuses an unscoped or mismatched tag, then tests, builds and creates the GitHub Release.
+- Rendered datasets are attached afterwards: `gh release upload v0.1.0 dist/<slug>/*`.
+
+MIT licence. Built for NOAA SOS sites, museums and science centres.

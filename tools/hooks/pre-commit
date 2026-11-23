@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Refuse to commit a blob big enough to matter, before it is in history.
+#
+# This exists because of a near miss: ShotVectors carries ~17 GB of .vpx tables,
+# table downloads and render output, and a single `git add -A` would have put
+# them in permanently. In a repo holding one project that is one repo to rewrite.
+# In this repo — the index, and eventually every project under projects/ — it is
+# everybody's clone, forever, and the only cure is a filter-repo rewrite that
+# invalidates every checkout that ever existed.
+#
+# The limit is on the STAGED bytes rather than the working tree, because those
+# are the bytes that would land. .gitignore is still the first line of defence;
+# this is the one that catches what .gitignore did not anticipate.
+#
+# Genuinely need a big file in?  git commit --no-verify
+set -euo pipefail
+
+LIMIT_MB=${GIT_BLOB_LIMIT_MB:-5}
+LIMIT=$((LIMIT_MB * 1024 * 1024))
+
+big=""
+# NUL-separated: paths in this repo contain spaces and brackets (the pinball
+# table names), and splitting on newlines mangles exactly those.
+while IFS= read -r -d '' path; do
+  sha=$(git rev-parse ":$path" 2>/dev/null) || continue
+  size=$(git cat-file -s "$sha" 2>/dev/null || echo 0)
+  if [ "$size" -gt "$LIMIT" ]; then
+    big+=$(printf '\n  %8.1f MB  %s' "$(echo "$size" | awk '{print $1/1048576}')" "$path")
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [ -n "$big" ]; then
+  cat >&2 <<MSG
+
+BLOCKED: staged file(s) over ${LIMIT_MB} MB
+$big
+
+History is permanent. A binary committed once is a full copy per revision
+forever, and survives this repo being forked, cloned, or made public.
+
+  ignore it   add the path to .gitignore (a project may re-include with !)
+  keep it     git commit --no-verify
+  raise it    GIT_BLOB_LIMIT_MB=25 git commit
+
+MSG
+  exit 1
+fi
+
+# Refuse a code change that scopes no version, and a scope doc with no code.
+#
+# The rule used to live in CLAUDE.md, where it applied to whichever commit
+# happened to be remembering it. tools/scope.py is the same rule as three
+# questions about the staged paths, and tools/test_scope.py is what says it
+# still answers them.
+#
+# Skip it for a commit that is genuinely not a version: GIT_SCOPE_DOC=0
+if [ "${GIT_SCOPE_DOC:-1}" != "0" ]; then
+  python3 "$(git rev-parse --show-toplevel)/tools/scope.py" || exit 1
+fi

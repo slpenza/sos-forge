@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sos-forge"
+version = "0.2.0"
+description = "Build NOAA Science On a Sphere datasets from open data with declarative recipes"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    "Pillow>=10.1",
+    "tifffile>=2024.1.30",
+    "imagecodecs>=2024.1.1",
+    "imageio-ffmpeg>=0.5",
+]
+
+[project.optional-dependencies]
+fit = ["fitdecode>=0.10"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+sos = "sosforge.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/slpenza/sos-forge"
+
+[tool.setuptools.packages.find]
+include = ["sosforge*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "tools"]

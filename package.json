@@ -1,0 +1,48 @@
+{
+  "name": "sos-forge-help",
+  "private": true,
+  "description": "Ask & Answer settings for sos-forge's help (sos.stevenpenza.com/help). sos-forge itself is a Python package; see pyproject.toml.",
+  "askAnswer": {
+    "key": "sos",
+    "label": "SOS Forge",
+    "docs": [
+      "./docs"
+    ],
+    "url": "https://sos.stevenpenza.com/help",
+    "head": "./site/help-head.html",
+    "bar": "./site/help-bar.html",
+    "title": {
+      "site": "SOS Forge",
+      "section": "Help"
+    },
+    "groups": [
+      {
+        "name": "Getting started",
+        "topics": [
+          "docs/getting-started.md",
+          "docs/simulator.md",
+          "docs/deploying.md"
+        ]
+      },
+      {
+        "name": "Making datasets",
+        "topics": [
+          "docs/recipe-reference.md",
+          "docs/video-formats.md"
+        ]
+      },
+      {
+        "name": "Data and credits",
+        "topics": [
+          "docs/data-sources.md"
+        ]
+      },
+      {
+        "name": "When something goes wrong",
+        "topics": [
+          "docs/troubleshooting.md"
+        ]
+      }
+    ]
+  }
+}

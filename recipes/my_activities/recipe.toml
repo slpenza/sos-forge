@@ -1,0 +1,31 @@
+# My Activities: your own GPS tracks (e.g. a fitness app's bulk export) glowing on the globe, with a zoomed detail inset.
+# 1. Export your activities from your fitness app or GPS watch (GPX, TCX or FIT files, zipped or not).
+# 2. Copy the files into recipes/my_activities/data/  (gitignored: never committed).
+# 3. sos build my_activities --preview
+# The first/last 400 m of each track are trimmed because raw exports include your home start/end points.
+
+[dataset]
+name = "My Activities"
+slug = "my_activities"
+description = "Every GPS activity in this collection glowing where it happened, with a zoomed detail panel on the opposite side of the globe."
+output = "texture"
+width = 4096
+
+[[layers]]
+type = "basemap"
+name = "black_marble"
+brightness = 0.35
+saturation = 0.6
+
+[[layers]]
+type = "tracks"
+source = { type = "tracks", path = "data/**/*" }
+privacy_trim_m = 400
+width_km = 6
+colormap = "fire"
+inset = true
+
+[hud]
+title = "{count} activities"
+subtitle = "{distance_km:,.0f} km of tracks"
+anchors = [-20, 90, -140]     # open ocean at 30S: South Atlantic, Indian, South Pacific

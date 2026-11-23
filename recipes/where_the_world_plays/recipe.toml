@@ -1,0 +1,59 @@
+# Where the World Plays: sports venues mapped by OpenStreetMap volunteers, spotlighting one sport at a time.
+# Cricket lights up South Asia, Aussie rules Australia, ice hockey the north, baseball the Americas and East Asia.
+# Data: ~8 Overpass queries (cached 30 days). Huge tags (soccer/baseball pitches, 180k-665k each) use stadiums only
+# so the public Overpass server is not hammered; point `endpoint` at your own Overpass for pitch-level detail.
+
+[dataset]
+name = "Where the World Plays"
+slug = "where_the_world_plays"
+description = "Sports venues mapped by OpenStreetMap volunteers, one sport at a time: stadiums, grounds, rinks and courses reveal where each game is loved."
+output = "movie"
+width = 4096
+
+[animation]
+frames = 1080          # 9 segments (8 sports + all) x 4 s at 30 fps
+fps = 30
+loop = true
+
+[playlist]
+subcategory = "Sports"
+
+[[layers]]
+type = "basemap"
+name = "black_marble"
+brightness = 0.35
+saturation = 0.6
+
+[[layers]]
+type = "points"
+category = "category"
+cycle = true
+cycle_all_label = "Every sport"
+cycle_dim = 0.05
+radius_km = 10
+halo_km = 90
+core_gain = 0.9
+halo_gain = 0.05
+halo_strength = 0.35
+intensity = 1.0
+palette = { "Soccer stadiums" = "#5ee07a", "Cricket" = "#ffd166", "Baseball stadiums" = "#ff6b6b", "Ice hockey" = "#7cc8ff", "American football" = "#ff9f43", "Rugby" = "#c792ea", "Australian rules" = "#f78fb3", "Golf courses" = "#b8e986" }
+
+[layers.source]
+type = "overpass"
+max_age_days = 30
+queries = [
+  { category = "Soccer stadiums",   query = 'nwr["leisure"="stadium"]["sport"="soccer"]' },
+  { category = "Cricket",           query = 'nwr["sport"="cricket"]' },
+  { category = "Baseball stadiums", query = 'nwr["leisure"="stadium"]["sport"="baseball"]' },
+  { category = "Ice hockey",        query = 'nwr["sport"="ice_hockey"]' },
+  { category = "American football", query = 'nwr["sport"="american_football"]' },
+  { category = "Rugby",             query = 'nwr["sport"~"^rugby_(union|league)$"]' },
+  { category = "Australian rules",  query = 'nwr["sport"="australian_football"]' },
+  { category = "Golf courses",      query = 'nwr["leisure"="golf_course"]' },
+]
+
+[hud]
+title = "{category}"
+subtitle = "{count:,} places mapped in OpenStreetMap"
+anchors = [-20, 90, -140]     # open ocean at 30S: South Atlantic, Indian, South Pacific
+lat = -30

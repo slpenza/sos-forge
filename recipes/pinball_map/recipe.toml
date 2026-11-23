@@ -1,0 +1,47 @@
+# Pinball Map: every public place to play pinball, appearing on the date it was added to pinballmap.com.
+# Needs an API token (manual approval): https://pinballmap.com/api_token  then  export PINBALLMAP_API_TOKEN=...
+# Data licence: CC BY-SA 4.0, so the rendered dataset is CC BY-SA 4.0 too and must credit Pinball Map.
+
+[dataset]
+name = "Pinball Map: Where to Play"
+slug = "pinball_map"
+description = "Every public pinball location listed by the Pinball Map community, each appearing on the date it was added. Brighter glows mean more machines."
+output = "movie"
+width = 4096
+license = "This dataset adapts Pinball Map data and is shared under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)."
+
+[animation]
+frames = 600           # 20 s at 30 fps
+fps = 30
+loop = false           # growth story: ends on today's map
+start = "2008-01-01"
+end = "today"
+
+[playlist]
+lastdwell = 6000       # hold the final (complete) frame for 6 s
+subcategory = "Recreation"
+
+[[layers]]
+type = "basemap"
+name = "black_marble"
+brightness = 0.4
+saturation = 0.7
+
+[[layers]]
+type = "points"
+source = { type = "pinballmap" }
+weight = "num_machines"
+weight_scale = "sqrt"
+time = "created_at"
+color = "#ff9f1c"
+radius_km = 12
+halo_km = 120
+halo_gain = 0.05
+flash_days = 120       # new locations flash for ~4 months of story time
+flash_color = "#fff3c4"
+
+[hud]
+title = "Pinball Map"
+subtitle = "{date:%B %Y}  ·  {count:,} places to play"
+progress = true
+anchors = [-20, 90, -140]     # open ocean at 30S: South Atlantic, Indian, South Pacific

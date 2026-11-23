@@ -1,0 +1,30 @@
+# Python / tooling
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.DS_Store
+
+# Build output and caches (downloads live in ~/.cache/sosforge)
+build/
+dist/
+dist-pkg/
+infra/node_modules/
+infra/cdk.out/
+infra/cdk.context.json
+*.part
+
+# Personal data: never commit activity exports or tokens
+recipes/*/data/private/
+recipes/my_activities/data/*
+!recipes/my_activities/data/README.md
+.env
+.env.*
+!.env.example
+
+# Local build logs
+/*.log
+
+# Private correspondence (outreach drafts) never belongs in this public repo
+[Oo]utreach/
