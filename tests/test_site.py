@@ -128,33 +128,67 @@ def test_release_assets_are_fetched_and_cached(monkeypatch):
         site.release_asset("o/r", "v0.1.0", "other.zip")
 
 
+def git(repo, *args):
+    """Run a git command in a test repo with a fixed identity. Helper; not itself tested."""
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+                   check=True, capture_output=True)
+
+
+def stand_in_ask_answer(root):
+    """Make a git repo standing in for ask-answer: v0.18.1 has the panel files and a corpus.py that refuses a frame, v0.19.1 a corpus.py that records the askAnswer block it reads, and the working tree is left on an untagged later commit. Helper; not itself tested."""
+    (root / "client").mkdir(parents=True)
+    (root / "tools").mkdir()
+    for f in site.PANEL_FILES:
+        (root / "client" / f).write_text(f"/* {f} v0.18.1 */")
+    head = "import json, pathlib, sys\nproject = pathlib.Path(sys.argv[sys.argv.index('--project') + 1])\n" \
+           "block = json.loads((project / 'package.json').read_text())['askAnswer']\n" \
+           "out = pathlib.Path(sys.argv[sys.argv.index('--docs-out') + 1])\nout.mkdir(parents=True, exist_ok=True)\n"
+    (root / "tools" / "corpus.py").write_text(head + "if 'bar' in block: sys.exit('askAnswer.bar is not a field')\n"
+                                              "(out / 'index.html').write_text('v0.18.1')\n")
+    git(root, "init", "-q")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "v0.18.1")
+    git(root, "tag", "v0.18.1")
+    (root / "tools" / "corpus.py").write_text(
+        head + "(out / 'index.html').write_text(json.dumps({'key': sys.argv[3], 'block': block, "
+        "'files': sorted(str(p.relative_to(project)) for p in project.rglob('*') if p.is_file())}))\n")
+    for f in site.PANEL_FILES:
+        (root / "client" / f).write_text(f"/* {f} v0.19.1 */")
+    git(root, "commit", "-qam", "v0.19.1")
+    git(root, "tag", "v0.19.1")
+    (root / "client" / site.PANEL_FILES[0]).write_text("/* work in progress */")
+    git(root, "commit", "-qam", "later")
+
+
 def test_build_site_end_to_end(tmp_path):
-    """Checks the site assembles static pages without test or fragment files, one dataset with its preview, the help via corpus.py, the panel files and config.json. Covers build_site, build_help and ask_checkout_release with a stand-in ask-answer checkout; this test is not itself tested."""
+    """Checks the site assembles static pages without test or fragment files, one dataset with its preview, the help from the [help] release's corpus.py with the frame added only in its copy of the project, the panel files from ask_release whatever the checkout has out, config.json, and that a missing tag fails a strict build. Covers build_site, build_help, release_tree and ask_release_files with a stand-in ask-answer repo; this test is not itself tested."""
     dist = tmp_path / "dist"
     make_dataset(dist / "tiny_h264", name="Tiny (H.264)")
     ask = tmp_path / "ask-answer"
-    (ask / "client").mkdir(parents=True)
-    for f in site.PANEL_FILES:
-        (ask / "client" / f).write_text(f"/* {f} */")
-    (ask / "tools").mkdir()
-    (ask / "tools" / "corpus.py").write_text(
-        "import sys, pathlib\nout = pathlib.Path(sys.argv[sys.argv.index('--docs-out') + 1])\n"
-        "out.mkdir(parents=True, exist_ok=True)\n(out / 'index.html').write_text('help for ' + sys.argv[3])\n")
+    stand_in_ask_answer(ask)
     cfg = tmp_path / "site.toml"
-    cfg.write_text('[site]\ndomain="d"\nask_release="v0.18.1"\n[[datasets]]\nslug="tiny"\nrelease="v0.1.0"\n'
-                   'preview="tiny_h264.zip"\ndownloads=["tiny.zip"]\n')
+    cfg.write_text('[site]\ndomain="d"\nask_release="v0.18.1"\n[help]\nrelease="v0.19.1"\nbar="./site/help-bar.html"\n'
+                   'title={site="S",section="Help"}\n[[help.groups]]\nname="All"\ntopics=["docs/getting-started.md"]\n'
+                   '[[datasets]]\nslug="tiny"\nrelease="v0.1.0"\npreview="tiny_h264.zip"\ndownloads=["tiny.zip"]\n')
     out = tmp_path / "out"
-    manifest = site.build_site(cfg, out, dist=dist, ask_checkout=ask, ask_base="https://ask.example/prod/")
+    manifest = site.build_site(cfg, out, dist=dist, ask_checkout=ask, ask_base="https://ask.example/prod/", strict_ask=True)
     d = manifest["datasets"][0]
     assert d["slug"] == "tiny" and d["downloads"][0]["url"] == "https://github.com/slpenza/sos-forge/releases/download/v0.1.0/tiny.zip"
     assert json.loads((out / "datasets.json").read_text()) == manifest
     assert json.loads((out / "config.json").read_text()) == {"askProjects": ["sos"], "askBase": "https://ask.example/prod"}
-    assert (out / "help" / "index.html").read_text() == "help for sos"
-    assert all((out / "ask" / f).exists() for f in site.PANEL_FILES)
+    seen = json.loads((out / "help" / "index.html").read_text())
+    assert seen["key"] == "sos" and seen["block"]["bar"] == "./site/help-bar.html" and seen["block"]["groups"][0]["name"] == "All"
+    assert {"package.json", "site/help-head.html", "site/help-bar.html", "docs/getting-started.md"} <= set(seen["files"])
+    assert "bar" not in json.loads((site.REPO_ROOT / "package.json").read_text())["askAnswer"]
+    assert all((out / "ask" / f).read_text() == f"/* {f} v0.18.1 */" for f in site.PANEL_FILES)
     for page in ("index.html", "simulator.html", "ask.html", "404.html", "js/globe.js", "css/site.css"):
         assert (out / page).exists(), page
     assert not list(out.rglob("*.test.mjs")) and not (out / "help-head.html").exists() and not (out / "site.toml").exists()
     bare = site.build_site(cfg, tmp_path / "bare", dist=dist)
     assert bare["datasets"] and json.loads((tmp_path / "bare" / "config.json").read_text()) == {"askProjects": ["sos"]}
-    with pytest.raises(RecipeError, match="pins v0.18.1"):
+    cfg.write_text(cfg.read_text().replace('release="v0.19.1"', 'release="v0.20.0"'))
+    with pytest.raises(RecipeError, match="no v0.20.0"):
         site.build_site(cfg, tmp_path / "strict", dist=dist, ask_checkout=ask, strict_ask=True)
+    cfg.write_text(cfg.read_text().replace('topics=["docs/getting-started.md"]', 'topics=["docs/nope.md"]'))
+    with pytest.raises(RecipeError, match="nope.md"):
+        site.load_config(cfg)

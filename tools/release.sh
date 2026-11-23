@@ -5,7 +5,8 @@
 # wheel, and publishes a GitHub Release whose notes are the scope doc.
 #
 # Needs: python3 with the dev extras and `build` installed, gh signed in (GH_TOKEN in CI), node 24, AWS access to
-# sosforge-deploy-role, $SOSFORGE_ASK_BASE, and an ask-answer checkout at site/site.toml's ask_release.
+# sosforge-deploy-role, $SOSFORGE_ASK_BASE, and an ask-answer clone holding site/site.toml's ask_release and
+# [help] release tags (the build reads both with git archive, whatever the clone has checked out).
 # Datasets (MP4/JPG) are not built here: bundle them and attach them to a data-YYYY-MM release before pushing the
 # version tag whose site/site.toml lists them (design/v0/v0.3.0.md).
 set -euo pipefail
@@ -31,7 +32,7 @@ else
 fi
 
 # The site, sos.stevenpenza.com (design/v0/v0.2.0.md): built from the datasets attached to releases and the
-# pinned ask-answer checkout, then deployed by CDK through sosforge-deploy-role (OIDC in CI, a profile by hand).
+# pinned ask-answer releases, then deployed by CDK through sosforge-deploy-role (OIDC in CI, a profile by hand).
 if [ -d infra ]; then
   python3 -m sosforge site --strict-ask --ask-answer "${SOSFORGE_ASK_ANSWER:-../ask-answer}" --out build/site
   [ -n "${CI:-}" ] || export AWS_PROFILE="${AWS_PROFILE:-sosforge-deploy-role}"

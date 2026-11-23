@@ -9,40 +9,6 @@
       "./docs"
     ],
     "url": "https://sos.stevenpenza.com/help",
-    "head": "./site/help-head.html",
-    "bar": "./site/help-bar.html",
-    "title": {
-      "site": "SOS Forge",
-      "section": "Help"
-    },
-    "groups": [
-      {
-        "name": "Getting started",
-        "topics": [
-          "docs/getting-started.md",
-          "docs/simulator.md",
-          "docs/deploying.md"
-        ]
-      },
-      {
-        "name": "Making datasets",
-        "topics": [
-          "docs/recipe-reference.md",
-          "docs/video-formats.md"
-        ]
-      },
-      {
-        "name": "Data and credits",
-        "topics": [
-          "docs/data-sources.md"
-        ]
-      },
-      {
-        "name": "When something goes wrong",
-        "topics": [
-          "docs/troubleshooting.md"
-        ]
-      }
-    ]
+    "head": "./site/help-head.html"
   }
 }

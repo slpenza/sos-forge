@@ -195,7 +195,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--dist", help="use built dataset folders from here instead of release downloads")
     p.add_argument("--ask-answer", help="ask-answer checkout (default $SOSFORGE_ASK_ANSWER or ../ask-answer)")
     p.add_argument("--ask-base", help="Ask API base URL (default $SOSFORGE_ASK_BASE)")
-    p.add_argument("--strict-ask", action="store_true", help="fail unless the checkout is at site.toml's ask_release")
+    p.add_argument("--strict-ask", action="store_true", help="fail unless the checkout has site.toml's ask_release and [help] release tags")
     p.add_argument("--serve", type=int, nargs="?", const=8040, help="serve the result locally on this port")
     p.set_defaults(fn=cmd_site)
     return ap

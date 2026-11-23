@@ -6,6 +6,7 @@ Ask & Answer's corpus.py, and copies Ask & Answer's panel files in. See design/v
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
@@ -13,6 +14,8 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 import tomllib
 import zipfile
 from pathlib import Path
@@ -27,6 +30,7 @@ SITE_KEYS = {"domain", "repo", "ask_release", "ask_projects", "preview_width"}
 DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist"}
 STATIC_SKIP = (".test.mjs", "help-head.html", "help-bar.html", "site.toml")
 PANEL_FILES = ("ask-client.js", "ask-panel.js", "ask-panel.css")
+HELP_KEYS = {"release", "bar", "title", "groups", "landing"}
 
 
 def parse_playlist(text: str) -> dict:
@@ -70,12 +74,19 @@ def readme_lists(text: str) -> dict[str, list[str]]:
 def load_config(path: Path) -> dict:
     """Load and validate site/site.toml, filling defaults and checking every dataset entry. Tested by test_site.py::test_config_validation."""
     raw = tomllib.loads(Path(path).read_text())
-    check_keys("site.toml", raw, {"site", "datasets"})
+    check_keys("site.toml", raw, {"site", "datasets", "help"})
     site = raw.get("site", {})
     check_keys("site", site, SITE_KEYS)
     cfg = {"domain": site.get("domain", ""), "repo": site.get("repo", "slpenza/sos-forge"),
            "ask_release": site.get("ask_release"), "ask_projects": site.get("ask_projects", ["sos"]),
            "preview_width": int(site.get("preview_width", 2048)), "datasets": []}
+    help_cfg = raw.get("help", {})
+    check_keys("help", help_cfg, HELP_KEYS)
+    cfg["help_release"] = help_cfg.get("release") or cfg["ask_release"]
+    cfg["help_frame"] = {k: help_cfg[k] for k in HELP_KEYS - {"release"} if k in help_cfg}
+    missing = [t for g in cfg["help_frame"].get("groups", []) for t in g.get("topics", []) if not (REPO_ROOT / t).is_file()]
+    if missing:
+        raise RecipeError(f"[help] groups name topics that do not exist: {', '.join(missing)}")
     seen = set()
     for d in raw.get("datasets", []):
         check_keys("datasets", d, DATASET_KEYS)
@@ -219,22 +230,51 @@ def dataset_entry(folder: Path, slug: str, out: Path, width: int, ffmpeg: str, d
             "licences": lists["licences"], "downloads": downloads, "labels": labels}
 
 
-def build_help(ask_checkout: Path, out: Path, key: str = "sos") -> None:
-    """Write the help pages with Ask & Answer's corpus.py from the pinned checkout, reading this repo's package.json. Tested by test_site.py::test_build_site_end_to_end with a stand-in corpus.py; the real tool is exercised by sos site."""
-    corpus = ask_checkout / "tools" / "corpus.py"
+def release_tree(ask_checkout: Path, tag: str, paths: list[str], into: Path) -> Path:
+    """Extract paths of an ask-answer release from the checkout's git history with git archive, leaving the checkout untouched, and return the folder. Tested by test_site.py::test_build_site_end_to_end against a git repo with two tags, including a missing tag."""
+    res = subprocess.run(["git", "-C", str(ask_checkout), "archive", "--format=tar", tag, *paths], capture_output=True)
+    if res.returncode != 0:
+        raise RecipeError(f"ask-answer checkout {ask_checkout} has no {tag} with {', '.join(paths)} "
+                          f"(git -C {ask_checkout} fetch --tags): {res.stderr.decode(errors='replace').strip()}")
+    if into.exists():
+        shutil.rmtree(into)
+    into.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(res.stdout)) as tar:
+        tar.extractall(into, filter="data")
+    return into
+
+
+def build_help(tools: Path, out: Path, frame: dict, key: str = "sos") -> None:
+    """Write the help pages with a release's corpus.py from a temporary copy of the project whose askAnswer block gains the [help] frame, so package.json keeps only what the deployed Ask & Answer accepts. Tested by test_site.py::test_build_site_end_to_end with a stand-in corpus.py that records the block it reads; the real tool is exercised by sos site."""
+    corpus = tools / "tools" / "corpus.py"
     if not corpus.exists():
         raise RecipeError(f"{corpus} not found: point --ask-answer (or $SOSFORGE_ASK_ANSWER) at an ask-answer checkout")
-    res = subprocess.run([sys.executable, str(corpus), "--project", str(REPO_ROOT), key, "--docs-out", str(out / "help")],
-                         capture_output=True, text=True)
+    pkg = json.loads((REPO_ROOT / "package.json").read_text())
+    block = {**pkg["askAnswer"], **frame}
+    with tempfile.TemporaryDirectory() as tmp:
+        project = Path(tmp) / "project"
+        project.mkdir()
+        for rel in [*block.get("docs", []), *(block[k] for k in ("head", "bar", "landing") if block.get(k))]:
+            src, dst = REPO_ROOT / rel, project / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            (shutil.copytree if src.is_dir() else shutil.copy2)(src, dst)
+        (project / "package.json").write_text(json.dumps({**pkg, "askAnswer": block}, indent=1))
+        res = subprocess.run([sys.executable, str(corpus), "--project", str(project), key, "--docs-out", str(out / "help")],
+                             capture_output=True, text=True)
     if res.returncode != 0:
         raise RecipeError(f"corpus.py could not build the help:\n{res.stderr.strip() or res.stdout.strip()}")
     LOG.info("help pages written (%d files)", sum(1 for _ in (out / "help").rglob("*") if _.is_file()))
 
 
-def ask_checkout_release(ask_checkout: Path) -> str | None:
-    """Return the tag the ask-answer checkout sits exactly on, or None when it is between tags. Tested indirectly by test_site.py::test_build_site_end_to_end."""
-    res = subprocess.run(["git", "-C", str(ask_checkout), "describe", "--tags", "--exact-match"], capture_output=True, text=True)
-    return res.stdout.strip() or None
+def ask_release_files(ask_checkout: Path, tag: str, paths: list[str], into: Path, strict: bool) -> Path:
+    """Return a folder holding a pinned release's paths, or the checkout as it stands (with a warning) when the tag is missing and the build is not strict. Tested by test_site.py::test_build_site_end_to_end."""
+    try:
+        return release_tree(ask_checkout, tag, paths, into)
+    except RecipeError as exc:
+        if strict:
+            raise
+        LOG.warning("%s; using the checkout as it stands", exc)
+        return ask_checkout
 
 
 def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_checkout: Path | None = None,
@@ -264,16 +304,12 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ch
     (out / "datasets.json").write_text(json.dumps(manifest, indent=1))
     ask_cfg: dict = {"askProjects": cfg["ask_projects"]}
     if ask_checkout:
-        have = ask_checkout_release(ask_checkout)
-        if have != cfg["ask_release"]:
-            msg = f"ask-answer checkout is at {have or 'no tag'}, site.toml pins {cfg['ask_release']}"
-            if strict_ask:
-                raise RecipeError(msg)
-            LOG.warning(msg)
-        build_help(ask_checkout, out)
+        panel = ask_release_files(ask_checkout, cfg["ask_release"], ["client"], work / "ask" / cfg["ask_release"], strict_ask)
+        tools = ask_release_files(ask_checkout, cfg["help_release"], ["tools"], work / "ask" / cfg["help_release"], strict_ask)
+        build_help(tools, out, cfg["help_frame"])
         (out / "ask").mkdir(exist_ok=True)
         for f in PANEL_FILES:
-            shutil.copy2(ask_checkout / "client" / f, out / "ask" / f)
+            shutil.copy2(panel / "client" / f, out / "ask" / f)
         if ask_base:
             ask_cfg["askBase"] = ask_base.rstrip("/")
     else:

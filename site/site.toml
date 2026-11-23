@@ -11,6 +11,31 @@ ask_release = "v0.18.1"          # ask-answer tag whose client/ and tools/ the b
 ask_projects = ["sos"]
 preview_width = 2048             # browser previews are H.264 at this width (or smaller sources as they are)
 
+
+# The help pages' frame. package.json's askAnswer block carries only what the deployed Ask & Answer (ask_release)
+# accepts, because it builds the corpus from it; the title, bar and groups are added to a temporary copy of the
+# project that this release's corpus.py builds the pages from (design/v0/v0.3.0.md).
+[help]
+release = "v0.19.1"              # ask-answer tag whose tools/corpus.py writes /help: the first that accepts title, bar and groups
+bar = "./site/help-bar.html"
+title = { site = "SOS Forge", section = "Help" }
+
+[[help.groups]]
+name = "Getting started"
+topics = ["docs/getting-started.md", "docs/simulator.md", "docs/deploying.md"]
+
+[[help.groups]]
+name = "Making datasets"
+topics = ["docs/recipe-reference.md", "docs/video-formats.md"]
+
+[[help.groups]]
+name = "Data and credits"
+topics = ["docs/data-sources.md"]
+
+[[help.groups]]
+name = "When something goes wrong"
+topics = ["docs/troubleshooting.md"]
+
 [[datasets]]
 slug = "where_the_world_plays"
 release = "data-2026-11"
