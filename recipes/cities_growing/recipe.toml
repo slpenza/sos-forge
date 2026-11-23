@@ -1,0 +1,44 @@
+# Cities Growing: every urban centre on Earth from 1975 to 2030, glowing by population, from the European Commission's
+# GHSL Urban Centre Database (R2024A). Values after 2025 are the database's projections, and the HUD says so.
+# First build downloads a 37 MB archive once (size- and hash-checked).
+
+[dataset]
+name = "Cities Growing"
+slug = "cities_growing"
+description = "About 11,000 urban centres from 1975 to 2030, each glowing by its population (GHSL Urban Centre Database R2024A, European Commission JRC). Years after 2025 are projections."
+output = "movie"
+width = 4096
+
+[animation]
+frames = 660           # 55 years at 12 frames a year: 22 s at 30 fps
+fps = 30
+loop = false
+start = "1975-01-01"
+end = "2030-01-01"
+
+[playlist]
+subcategory = "People"
+
+[[layers]]
+type = "basemap"
+name = "blue_marble"
+brightness = 0.2
+saturation = 0.5
+
+[[layers]]
+type = "points"
+source = { type = "ghsl_ucdb" }
+weight_series = "MT_POP_TOT_{year}"
+weight_scale = "sqrt"
+weight_ref = "auto"
+color = "#ffc46b"
+radius_km = 14
+halo_km = 140
+core_gain = 0.45
+halo_gain = 0.04
+halo_strength = 0.4
+
+[hud]
+anchors = [-20, 90, -140]   # open ocean at 30S: South Atlantic, Indian, South Pacific
+title = "{year}"
+subtitle = "{people} people in urban centres{projected}"

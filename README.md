@@ -49,6 +49,9 @@ sphere: set `[hud] mode = "labels"`, or switch them on from the iPad.
 | `lunar_phases` | 24 s loop: the Sun circles the tidally locked Moon over 29.5 days, with relief shading and cast shadows | NASA SVS CGI Moon Kit (LRO LROC + LOLA) |
 | `where_the_world_plays` | 36 s loop spotlighting where eight sports are played | OpenStreetMap via Overpass (ODbL) |
 | `pinball_map` | 20 s growth story: every place to play pinball, appearing on the date it was added | [Pinball Map](https://pinballmap.com) API (CC BY-SA 4.0, token required) |
+| `tonight_aurora` | Still image: NOAA's aurora forecast over the real day and night at build time | NOAA SWPC OVATION (public domain) |
+| `getting_richer` | 40 s, 1820 to 2022: average income per person in every country, on a log colour scale with a legend | Maddison Project Database 2023 via Our World in Data (CC BY 4.0); Natural Earth |
+| `cities_growing` | 22 s, 1975 to 2030: about 11,700 urban centres glowing by population, with projections marked | GHSL Urban Centre Database R2024A, European Commission JRC (CC BY 4.0) |
 | `my_activities` | Still image: your GPS tracks glowing on the globe, with a zoomed inset | Your own GPX/TCX/FIT files (e.g. a fitness app's bulk export) |
 
 ## A recipe in 20 lines
@@ -128,6 +131,8 @@ node --test site/js/*.test.mjs          # simulator logic
   ```
   `release.yml` then runs `tools/release.sh` in the `production` environment, the same script you can run by
   hand. It refuses an unscoped or mismatched tag, then tests, builds and creates the GitHub Release.
-- Rendered datasets are attached afterwards: `gh release upload v0.1.0 dist/<slug>/*`.
+- **Rendered datasets go on a data release first**, so the version's site deploy can download them:
+  `sos bundle <slug>`, then `gh release create data-YYYY-MM <zips>`, then list them in `site/site.toml`. A
+  `data-*` tag deploys nothing.
 
 MIT licence. Built for NOAA SOS sites, museums and science centres.

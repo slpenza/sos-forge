@@ -46,11 +46,15 @@ Unknown keys are errors, and the error suggests the closest valid key.
 | `fit_samples` | `96` | Frames sampled to fit font sizes, so text never jumps between frames |
 
 **Template values:**
-- Every frame has `name`, `frame`, `frames`, `fraction` and `date`. Use for example `{date:%B %Y}` or `{fraction:.0%}`.
+- Every frame has `name`, `frame`, `frames`, `fraction` and `date`, plus `year` when `[animation]` has dates. Use for
+  example `{date:%B %Y}` or `{fraction:.0%}`.
 - Layers add their own values:
   - points: `count`, `weight_sum`, `category`, `categories`
   - tracks: `count`, `distance_km`, `span_km`
   - lit_globe: `sun_lon_deg`
+  - daylight: `sun_time`, `sun_lat`, `sun_lon`
+  - grid: the source's times (the aurora forecast has `forecast_time` and `observation_time`) and `grid_peak`
+  - regions: `year`, `regions_with_data`
 - A recipe hook can add anything else.
 
 ## `[encode]`
@@ -93,6 +97,8 @@ Optional: `brightness`, `saturation`, `opacity`, `credit`.
 |---|---|---|
 | `source` | required | A source table (below) |
 | `weight`, `weight_scale` | none, `linear` | Numeric column for brightness; `linear`, `sqrt` or `log` |
+| `weight_series` | none | A column template such as `"pop_{year}"`. Weights follow the frame's year, interpolated between columns, and points stay dark until they have weight. Replaces `weight` and `time` |
+| `weight_ref` | none | The weight drawn at full strength: a number, or `"auto"` for the 99th percentile. Use it when weights are large numbers such as populations |
 | `time` | none | Date column; with `[animation] start/end` points appear on their date |
 | `flash_days`, `flash_color` | `0`, white | New points flash for this many days of story time |
 | `category`, `categories`, `palette` | none | Category column, optional explicit order, and `{ Name = "#hex" }` colours |
@@ -118,6 +124,45 @@ An albedo map lit by a Sun that circles the equator, with DEM relief normals and
 - shading: `relief`, `shadows`, `shadow_max_km`, `ambient` (linear light), `brdf` (`lambert` or `lommel-seeliger`)
 - Sun path: `sun_start_lon_deg`, `sun_direction` (`west` or `east`), `sun_cycles`, `sun_lat_deg`
 
+### `daylight`
+
+Day imagery where the Sun is up and night imagery where it is down, blended through twilight, for the Sun's real
+position:
+- `day`, `night`: basemap names or image paths (defaults `blue_marble` and `black_marble`)
+- `day_brightness`, `night_brightness`, `twilight_deg` (default 12)
+- `at`: `timeline` (each frame's date; needs `[animation] start` and `end`), `now` (the build time), or an ISO
+  date-time such as `"2026-12-21T12:00:00Z"`
+
+### `grid`
+
+A gridded field, such as the aurora forecast, drawn as light or paint.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `source` | required | A gridded source (`swpc_aurora`) |
+| `colormap` | `aurora` | `fire`, `ice`, `aurora`, `wealth`, `sea` or `"#rrggbb"` |
+| `min`, `max`, `gamma` | data range, 1 | The values mapped onto the colour ramp |
+| `blend`, `opacity` | `add`, 1 | `add` glows as light; `over` paints over the layers below, covering more where values are higher |
+| `smooth_km` | 0 | Softens a coarse grid |
+
+### `regions`
+
+Countries, or any polygons, shaded by a value that changes year by year, with borders and a colour-bar legend.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `regions` | required | A region source (`natural_earth`, `geojson_regions`) |
+| `data` | required | A table of code, year and value (`owid`, `table`) |
+| `scale`, `min`, `max` | `linear`, 2nd and 98th percentile | `log` also interpolates between data years geometrically, so steady growth looks steady |
+| `colormap`, `opacity` | `wealth`, 0.85 | |
+| `no_data_color`, `no_data_opacity` | grey, 0.55 | Regions with no value that year |
+| `border_color`, `border_opacity` | white, 0.22 | |
+| `year` | the frame's date | Fixes one year instead |
+| `legend`, `legend_title`, `legend_format`, `legend_lat`, `legend_anchors` | on, the data's unit, `{:,.0f}`, −46, the HUD anchors | The colour-bar panels |
+
+Values are interpolated between data years and held at most one year past a region's first and last value. Regions
+that share a code, such as a country and its territories, share its value.
+
 ## Sources (`source = { type = ... }`)
 
 | Type | Keys | Notes |
@@ -127,6 +172,12 @@ An albedo map lit by a Sun that circles the equator, with DEM relief normals and
 | `tracks` | `path` (glob), `attribution` | GPX, TCX, FIT (needs `pip install 'sos-forge[fit]'`) and `.gz` versions; GeoJSON lines |
 | `overpass` | `queries = [{ category, query }]`, `endpoint`, `max_age_days`, `timeout_s`, `pause_s` | Overpass QL statements; output is cached and paced |
 | `pinballmap` | `url`, `params`, `token_env`, `max_age_days` | Needs `$PINBALLMAP_API_TOKEN`; CC BY-SA 4.0 |
+| `ghsl_ucdb` | none | About 11,700 urban centres with population every five years from 1975 to 2030 (GHSL R2024A; 2030 is projected). Columns `name`, `country` and `MT_POP_TOT_<year>`. Downloads 37 MB once |
+| `swpc_aurora` | `max_age_minutes` | NOAA's OVATION aurora forecast: a 1° grid of the 0–100 % chance of aurora overhead. Cached 30 minutes. For `grid` layers |
+| `natural_earth` | `scale` (`50m` or `110m`) | Country shapes keyed by ISO 3166 alpha-3 code. For `regions` layers |
+| `geojson_regions` | `path`, `code`, `name`, `attribution`, `license` | Your own polygons. For `regions` layers |
+| `owid` | `slug`, `column`, `max_age_days` | Any Our World in Data chart, named as in its URL (`ourworldindata.org/grapher/<slug>`), with its citation. For `regions` data |
+| `table` | `path`, `code`, `year`, `value`, `attribution`, `license` | Your own CSV of codes, years and values. For `regions` data |
 
 ## Custom code: `recipe.py`
 
@@ -146,9 +197,11 @@ class MyLayer(Layer):
 
 def values(t, ctx):          # extra HUD values for every frame (t.fraction, t.date, t.index)
     return {"day": 29.53 * t.fraction}
+# or def values(t, ctx, vals): to also see the layer values, e.g. vals["weight_sum"]
 
 def checks(ctx, layers):     # extra verification; failures stop strict builds
     return [Check("my check", True, "detail")]
 ```
 
 The `lunar_phases` recipe is a complete example: it adds phase names, a phase icon and landmark checks.
+`cities_growing` shows the three-parameter `values` hook turning a population total into words.

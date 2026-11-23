@@ -13,33 +13,15 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..checks import Check
+from ..colormaps import colormap  # noqa: F401  (re-exported for callers of the tracks layer)
 from ..density import glow, spherical_gaussian
-from ..grid import great_circle_m, latlon_to_px, linear_to_srgb, parse_color, unit_vectors, vectors_to_latlon
+from ..grid import great_circle_m, latlon_to_px, linear_to_srgb, unit_vectors, vectors_to_latlon
 from ..hud import load_font, render_template
 from ..panels import Placement, composite, forward_gnomonic, panel_pixels, premultiply
 from ..recipe import REQUIRED, RecipeError
 from ..registry import register_layer
 from ..sources import load_source
 from .base import Layer
-
-COLORMAPS = {
-    "fire": [(0.0, "#000000"), (0.25, "#7a0000"), (0.5, "#ff3b00"), (0.75, "#ffb000"), (1.0, "#fff6d8")],
-    "ice": [(0.0, "#000000"), (0.3, "#0b2a6f"), (0.6, "#1e88e5"), (0.85, "#7fdbff"), (1.0, "#ffffff")],
-}
-
-
-def colormap(values: np.ndarray, name: str) -> np.ndarray:
-    """Map 0..1 values to linear-light RGB with a named ramp or a single '#rrggbb' colour scaled by value. Tested by test_layers.py::test_colormap_and_trim."""
-    v = np.clip(values, 0.0, 1.0).astype(np.float32)
-    if name.startswith("#"):
-        return v[..., None] * parse_color(name)
-    if name not in COLORMAPS:
-        raise RecipeError(f"unknown colormap '{name}' (use {', '.join(COLORMAPS)} or '#rrggbb')")
-    stops = COLORMAPS[name]
-    xs = np.array([s for s, _ in stops], np.float32)
-    cs = np.stack([parse_color(c) for _, c in stops])
-    return np.stack([np.interp(v, xs, cs[:, ch]) for ch in range(3)], axis=-1).astype(np.float32)
-
 
 def trim_ends(lat: np.ndarray, lon: np.ndarray, trim_m: float) -> tuple[np.ndarray, np.ndarray]:
     """Drop points within trim_m of a track's start and end along the path, returning empty arrays for short tracks. Tested by test_layers.py::test_colormap_and_trim."""

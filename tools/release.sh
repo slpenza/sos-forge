@@ -6,7 +6,8 @@
 #
 # Needs: python3 with the dev extras and `build` installed, gh signed in (GH_TOKEN in CI), node 24, AWS access to
 # sosforge-deploy-role, $SOSFORGE_ASK_BASE, and an ask-answer checkout at site/site.toml's ask_release.
-# Datasets (MP4/JPG) are not built here; attach them afterwards with `gh release upload <tag> dist/<slug>/*`.
+# Datasets (MP4/JPG) are not built here: bundle them and attach them to a data-YYYY-MM release before pushing the
+# version tag whose site/site.toml lists them (design/v0/v0.3.0.md).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 

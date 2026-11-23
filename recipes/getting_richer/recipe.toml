@@ -1,0 +1,42 @@
+# Getting Richer: average income per person in every country, 1820-2022, from the Maddison Project via Our World in
+# Data, on a log colour scale so a doubling looks the same anywhere. Grey means no estimate that year. Borders are
+# today's (Natural Earth), so early years show modern countries.
+
+[dataset]
+name = "Getting Richer"
+slug = "getting_richer"
+description = "Average income per person in every country from 1820 to 2022, adjusted for prices (2011 international dollars, Maddison Project Database 2023). Grey means no estimate for that year; borders are today's."
+output = "movie"
+width = 4096
+
+[animation]
+frames = 1212          # 202 years at 6 frames a year: 40 s at 30 fps
+fps = 30
+loop = false
+start = "1820-01-01"
+end = "2022-01-01"
+
+[playlist]
+subcategory = "Economy"
+
+[[layers]]
+type = "basemap"
+name = "blue_marble_relief"
+brightness = 0.25
+saturation = 0.3
+
+[[layers]]
+type = "regions"
+regions = { type = "natural_earth" }
+data = { type = "owid", slug = "gdp-per-capita-maddison-project-database" }
+scale = "log"
+min = 500
+max = 60000
+colormap = "wealth"
+legend_title = "Income per person (2011 international $)"
+legend_format = "${:,.0f}"
+
+[hud]
+anchors = [-20, 90, -140]   # open ocean at 30S: South Atlantic, Indian, South Pacific
+title = "{year}"
+subtitle = "Average income per person"

@@ -1,0 +1,31 @@
+# Tonight's Aurora: NOAA's OVATION forecast of where the northern and southern lights may be overhead in the next hour,
+# drawn over the real day and night at build time. Rebuild for a fresh forecast; the feed is cached for 30 minutes.
+
+[dataset]
+name = "Tonight's Aurora"
+slug = "tonight_aurora"
+description = "NOAA's short-term forecast of the chance of seeing an aurora overhead, drawn on Earth as the Sun lit it when this image was made. The ovals sit around the magnetic poles and swell during geomagnetic storms."
+output = "texture"
+width = 4096
+
+[playlist]
+subcategory = "Space weather"
+
+[[layers]]
+type = "daylight"
+at = "now"
+day_brightness = 0.45
+
+[[layers]]
+type = "grid"
+source = { type = "swpc_aurora" }
+colormap = "aurora"
+min = 3
+max = 60
+gamma = 0.8
+smooth_km = 40
+
+[hud]
+anchors = [-20, 90, -140]   # open ocean at 30S: South Atlantic, Indian, South Pacific
+title = "Aurora forecast"
+subtitle = "{forecast_time:%d %b %Y, %H:%M} UTC"

@@ -223,3 +223,30 @@ def test_lit_globe_sun_schedule_and_centroid(tmp_path):
     assert canvas[32, 64].sum() > 0 and canvas[32, 0].sum() == 0
     assert g.values(ctx.timeline.at(2))["sun_lon_deg"] == pytest.approx(90.0)
     assert parse_color("#000000").sum() == 0
+
+
+def test_points_weight_series(tmp_path):
+    """Checks a {year} column template interpolates weights by frame year, points with zero weight stay hidden, totals are raw, and bad templates are refused. Covers PointsLayer series_columns, _weights, _scale and values with weight_series; this test is not itself tested."""
+    csv_text = "lat,lon,pop_1975,pop_2000,pop_2025\n0,0,100,300,500\n10,10,0,0,1000\n"
+    toml = ('[dataset]\nname="p"\noutput="movie"\n[animation]\nframes=3\nloop=false\nstart="1975-01-01"\nend="2025-01-01"\n'
+            '[[layers]]\ntype="basemap"\ncolor="#000000"\n[[layers]]\ntype="points"\nsource={type="csv",path="p.csv"}\n'
+            'weight_series="pop_{year}"\nweight_scale="sqrt"\n[hud]\nenabled=false\n')
+    ctx, layers, fr = setup(tmp_path, toml, {"p.csv": csv_text}, frames=3)
+    pts = layers[1]
+    v0, v1, v2 = (pts.values(ctx.timeline.at(i)) for i in range(3))
+    assert (v0["count"], v0["weight_sum"]) == (1, 100.0)
+    assert v1["weight_sum"] == pytest.approx(300.0, rel=0.01)
+    assert (v2["count"], v2["weight_sum"]) == (2, 1500.0)
+    assert pts.ref == 1.0 and np.allclose(pts._scale(np.array([4.0, -1.0])), [2.0, 0.0])
+    ctx_a, layers_a, _ = setup(tmp_path / "auto", toml.replace('weight_scale="sqrt"', 'weight_scale="sqrt"\nweight_ref="auto"'),
+                               {"p.csv": csv_text}, frames=3)
+    assert layers_a[1].ref == pytest.approx(np.percentile([np.sqrt(500), np.sqrt(1000)], 99))
+    assert layers_a[1].store.get_json("meta")["weight_ref"] == layers_a[1].ref
+    c = np.zeros((128, 256, 3), np.float32)
+    pts.render(c, ctx.timeline.at(2))
+    assert c.max() > 0
+    for bad, msg in (('weight_series="pop"', "{year}"), ('weight_series="pop_{year}"\nweight="pop_1975"', "replaces"),
+                     ('weight_series="pop_{year}"\nweight_ref=-1', "weight_ref")):
+        r = load_recipe(write_recipe(tmp_path / f"bad{len(msg)}", toml.replace('weight_series="pop_{year}"', bad)))
+        with pytest.raises(RecipeError, match=msg):
+            make_layers(make_context(r, BuildOptions(width=64, frames=3, build_dir=tmp_path / "bb")))

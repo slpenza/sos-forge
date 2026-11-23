@@ -97,3 +97,46 @@ def numeric_or_text(values: list) -> np.ndarray:
         return np.array([float(v) if v not in ("", None) else np.nan for v in values], dtype=np.float64)
     except (TypeError, ValueError):
         return np.array(["" if v is None else str(v) for v in values], dtype=object)
+
+
+@dataclass
+class DataTable:
+    """Columnar data without coordinates, such as country-by-year values. Tested by test_v3_sources.py::test_owid_and_table_sources."""
+
+    columns: dict[str, np.ndarray]
+    attribution: str = ""
+    license: str = ""
+    fingerprint: str = ""
+
+    def column(self, name: str) -> np.ndarray:
+        """Return a column by name or raise a RecipeError listing the available columns. Tested by test_v3_sources.py::test_owid_and_table_sources."""
+        if name not in self.columns:
+            raise RecipeError(f"column '{name}' not found; available: {', '.join(sorted(self.columns))}")
+        return self.columns[name]
+
+
+@dataclass
+class GridField:
+    """A regular latitude/longitude grid of values: row 0 at lat0, column 0 at lon0, steps in degrees, plus named times. Tested by test_v3_sources.py::test_swpc_aurora_parses_grid."""
+
+    values: np.ndarray
+    lon0: float
+    dlon: float
+    lat0: float
+    dlat: float
+    times: dict = field(default_factory=dict)
+    attribution: str = ""
+    license: str = ""
+    fingerprint: str = ""
+
+
+@dataclass
+class RegionSet:
+    """Named regions with codes and outer rings as (N, 2) lon/lat arrays, for shading by value. Tested by test_v3_sources.py::test_natural_earth_and_geojson_regions."""
+
+    codes: list[str]
+    names: list[str]
+    rings: list[list[np.ndarray]]
+    attribution: str = ""
+    license: str = ""
+    fingerprint: str = ""

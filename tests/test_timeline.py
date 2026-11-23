@@ -16,9 +16,19 @@ def test_linear_dates_and_loop_fractions():
     assert lin.at(0).date == datetime(2020, 1, 1, tzinfo=timezone.utc)
     assert lin.at(4).date == datetime(2020, 1, 5, tzinfo=timezone.utc) and lin.at(2).fraction == 0.5
     assert Timeline(1, 30, False).at(0).fraction == 1.0
-    assert set(lin.at(1).values()) == {"frame", "frames", "fraction", "date"}
+    assert set(lin.at(1).values()) == {"frame", "frames", "fraction", "date", "year"}
     assert parse_date("today").tzinfo is not None and parse_date("") is None
     with pytest.raises(ValueError):
         Timeline(5, 30, False, "2020-01-01", None)
     with pytest.raises(ValueError):
         Timeline(5, 30, False, "2021-01-01", "2020-01-01")
+
+
+def test_fractional_year():
+    """Checks fractional years count the time of day and leap years, and offset date-times convert to UTC. Covers fractional_year and parse_date with offsets; this test is not itself tested."""
+    from sosforge.timeline import fractional_year
+    assert fractional_year(parse_date("2004-12-31T12:00:00")) == pytest.approx(2004 + 365.5 / 366)
+    assert fractional_year(parse_date("2023-07-02T12:00:00")) == pytest.approx(2023 + 182.5 / 365)
+    assert parse_date("2026-11-23T03:56:00+02:00").hour == 1
+    tl = Timeline(3, 30, False, "1999-06-01", "2001-06-01")
+    assert tl.at(2).values()["year"] == 2001 and "year" not in Timeline(3, 30, False).at(0).values()

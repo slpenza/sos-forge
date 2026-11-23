@@ -121,13 +121,15 @@ class FrameRenderer:
             self.hud = HudRenderer(ctx.width, ctx.height, spec, [self.values(ctx.timeline.at(i)) for i in idx])
 
     def values(self, t) -> dict:
-        """Merge timeline, layer and recipe-hook values for HUD templates. Tested by test_recipe.py::test_hook_registers_layer_and_values."""
+        """Merge timeline, layer and recipe-hook values for HUD templates, passing a three-argument hook the values so far. Tested by test_recipe.py::test_hook_registers_layer_and_values and test_v3_recipes.py::test_hook_sees_layer_values."""
         v = {"name": self.ctx.recipe.dataset["name"], **t.values()}
         for layer in self.layers:
             v.update(layer.values(t))
         hook = self.ctx.recipe.hook("values")
         if hook:
-            v.update(hook(t, self.ctx) or {})
+            import inspect
+            wants_values = len(inspect.signature(hook).parameters) >= 3
+            v.update((hook(t, self.ctx, dict(v)) if wants_values else hook(t, self.ctx)) or {})
         return v
 
     def label(self, index: int) -> str:

@@ -126,7 +126,7 @@ def release_asset(repo: str, tag: str, name: str) -> Path:
     asset = next((a for a in meta.get("assets", []) if a.get("name") == name), None)
     if asset is None:
         have = ", ".join(a.get("name", "?") for a in meta.get("assets", [])) or "none"
-        raise RecipeError(f"release {tag} of {repo} has no asset {name!r} (has: {have}); upload it with sos bundle + gh release upload")
+        raise RecipeError(f"release {tag} of {repo} has no asset {name!r} (has: {have}); upload it with sos bundle + gh release upload {tag}")
     body = http_request(asset["browser_download_url"], retries=3, timeout=900)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")

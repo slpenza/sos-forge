@@ -16,7 +16,15 @@ def parse_date(value) -> datetime | None:
     if str(value).lower() == "today":
         now = datetime.now(timezone.utc)
         return datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-    return datetime.fromisoformat(str(value)).replace(tzinfo=timezone.utc)
+    parsed = datetime.fromisoformat(str(value))
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def fractional_year(when: datetime) -> float:
+    """Return a date as a fractional year, counting the time of day and the real length of that year. Tested by test_timeline.py::test_fractional_year."""
+    start = datetime(when.year, 1, 1, tzinfo=when.tzinfo)
+    length = datetime(when.year + 1, 1, 1, tzinfo=when.tzinfo) - start
+    return when.year + (when - start) / length
 
 
 @dataclass(frozen=True)
@@ -29,8 +37,11 @@ class FrameTime:
     date: datetime | None
 
     def values(self) -> dict:
-        """Return template values for the HUD, such as frame, frames, fraction and date. Tested by test_timeline.py::test_linear_dates_and_loop_fractions."""
-        return {"frame": self.index, "frames": self.count, "fraction": self.fraction, "date": self.date}
+        """Return template values for the HUD: frame, frames, fraction, date, and year when the timeline has dates. Tested by test_timeline.py::test_linear_dates_and_loop_fractions and test_fractional_year."""
+        v = {"frame": self.index, "frames": self.count, "fraction": self.fraction, "date": self.date}
+        if self.date is not None:
+            v["year"] = self.date.year
+        return v
 
 
 class Timeline:
