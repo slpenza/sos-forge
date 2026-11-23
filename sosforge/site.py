@@ -304,8 +304,10 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ch
     (out / "datasets.json").write_text(json.dumps(manifest, indent=1))
     ask_cfg: dict = {"askProjects": cfg["ask_projects"]}
     if ask_checkout:
-        panel = ask_release_files(ask_checkout, cfg["ask_release"], ["client"], work / "ask" / cfg["ask_release"], strict_ask)
-        tools = ask_release_files(ask_checkout, cfg["help_release"], ["tools"], work / "ask" / cfg["help_release"], strict_ask)
+        panel = ask_release_files(ask_checkout, cfg["ask_release"], ["client"],
+                                  work / "ask" / "client" / cfg["ask_release"], strict_ask)
+        tools = ask_release_files(ask_checkout, cfg["help_release"], ["tools"],
+                                  work / "ask" / "tools" / cfg["help_release"], strict_ask)
         build_help(tools, out, cfg["help_frame"])
         (out / "ask").mkdir(exist_ok=True)
         for f in PANEL_FILES:

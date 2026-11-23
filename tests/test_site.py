@@ -161,7 +161,7 @@ def stand_in_ask_answer(root):
 
 
 def test_build_site_end_to_end(tmp_path):
-    """Checks the site assembles static pages without test or fragment files, one dataset with its preview, the help from the [help] release's corpus.py with the frame added only in its copy of the project, the panel files from ask_release whatever the checkout has out, config.json, and that a missing tag fails a strict build. Covers build_site, build_help, release_tree and ask_release_files with a stand-in ask-answer repo; this test is not itself tested."""
+    """Checks the site assembles static pages without test or fragment files, one dataset with its preview, the help from the [help] release's corpus.py with the frame added only in its copy of the project, the panel files from ask_release whatever the checkout has out, both from one tag when the pins match, config.json, and that a missing tag fails a strict build. Covers build_site, build_help, release_tree and ask_release_files with a stand-in ask-answer repo; this test is not itself tested."""
     dist = tmp_path / "dist"
     make_dataset(dist / "tiny_h264", name="Tiny (H.264)")
     ask = tmp_path / "ask-answer"
@@ -186,6 +186,12 @@ def test_build_site_end_to_end(tmp_path):
     assert not list(out.rglob("*.test.mjs")) and not (out / "help-head.html").exists() and not (out / "site.toml").exists()
     bare = site.build_site(cfg, tmp_path / "bare", dist=dist)
     assert bare["datasets"] and json.loads((tmp_path / "bare" / "config.json").read_text()) == {"askProjects": ["sos"]}
+    same = tmp_path / "same.toml"
+    same.write_text(cfg.read_text().replace('[help]\nrelease="v0.19.1"', '[help]').replace('ask_release="v0.18.1"', 'ask_release="v0.19.1"'))
+    assert site.load_config(same)["help_release"] == "v0.19.1"
+    site.build_site(same, tmp_path / "same", dist=dist, ask_checkout=ask, strict_ask=True)
+    assert all((tmp_path / "same" / "ask" / f).read_text() == f"/* {f} v0.19.1 */" for f in site.PANEL_FILES)
+    assert json.loads((tmp_path / "same" / "help" / "index.html").read_text())["block"]["bar"] == "./site/help-bar.html"
     cfg.write_text(cfg.read_text().replace('release="v0.19.1"', 'release="v0.20.0"'))
     with pytest.raises(RecipeError, match="no v0.20.0"):
         site.build_site(cfg, tmp_path / "strict", dist=dist, ask_checkout=ask, strict_ask=True)

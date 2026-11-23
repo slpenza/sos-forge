@@ -7,16 +7,16 @@
 [site]
 domain = "sos.stevenpenza.com"
 repo = "slpenza/sos-forge"
-ask_release = "v0.18.1"          # ask-answer tag whose client/ and tools/ the build copies; keep equal to ask-answer-deploy's "release"
+ask_release = "v0.19.1"          # ask-answer tag whose client/ and tools/ the build copies; keep equal to ask-answer-deploy's "release"
 ask_projects = ["sos"]
 preview_width = 2048             # browser previews are H.264 at this width (or smaller sources as they are)
 
 
-# The help pages' frame. package.json's askAnswer block carries only what the deployed Ask & Answer (ask_release)
-# accepts, because it builds the corpus from it; the title, bar and groups are added to a temporary copy of the
-# project that this release's corpus.py builds the pages from (design/v0/v0.3.0.md).
+# The help pages' frame. package.json's askAnswer block carries only what the corpus needs; the title, bar and groups
+# are added to a temporary copy of the project that ask_release's corpus.py builds the pages from, so the frame never
+# depends on what the deployed Ask & Answer accepts (design/v0/v0.3.0.md). Add release = "<tag>" only if the pages
+# must be built by a different ask-answer tag than the panel.
 [help]
-release = "v0.19.1"              # ask-answer tag whose tools/corpus.py writes /help: the first that accepts title, bar and groups
 bar = "./site/help-bar.html"
 title = { site = "SOS Forge", section = "Help" }
 
