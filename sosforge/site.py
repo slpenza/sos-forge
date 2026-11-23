@@ -18,7 +18,7 @@ import zipfile
 from pathlib import Path
 
 from .encode import find_ffmpeg
-from .fetch import cache_root, http_request
+from .fetch import cache_root, http_request, redirect_location
 from .recipe import RecipeError, check_keys
 
 LOG = logging.getLogger("sosforge.site")
@@ -115,7 +115,7 @@ def bundle(slug: str, dist: Path) -> list[Path]:
 
 
 def release_asset(repo: str, tag: str, name: str) -> Path:
-    """Download one release asset to the shared cache (once) and return its path, using $GH_TOKEN or $GITHUB_TOKEN when set. Tested by test_site.py::test_release_assets_are_fetched_and_cached with stubbed HTTP."""
+    """Download one release asset to the shared cache (once) and return its path; with $GH_TOKEN or $GITHUB_TOKEN it goes through the asset API, which private repos need, and the token never reaches the storage host it redirects to. Tested by test_site.py::test_release_assets_are_fetched_and_cached with stubbed HTTP."""
     dest = cache_root() / "releases" / repo.replace("/", "_") / tag / name
     if dest.exists() and dest.stat().st_size > 0:
         return dest
@@ -127,7 +127,13 @@ def release_asset(repo: str, tag: str, name: str) -> Path:
     if asset is None:
         have = ", ".join(a.get("name", "?") for a in meta.get("assets", [])) or "none"
         raise RecipeError(f"release {tag} of {repo} has no asset {name!r} (has: {have}); upload it with sos bundle + gh release upload {tag}")
-    body = http_request(asset["browser_download_url"], retries=3, timeout=900)
+    if token:
+        api = {"Accept": "application/octet-stream", **auth}
+        signed = redirect_location(asset["url"], api)
+        body = http_request(signed, retries=3, timeout=900) if signed else http_request(asset["url"], headers=api,
+                                                                                        retries=3, timeout=900)
+    else:
+        body = http_request(asset["browser_download_url"], retries=3, timeout=900)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
     tmp.write_bytes(body)

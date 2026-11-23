@@ -80,6 +80,27 @@ def _urlopen(url: str, *, data: bytes | None = None, headers: dict | None = None
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect handler that refuses to follow, so the caller sees the 3xx and its Location. Tested indirectly by test_site.py::test_release_assets_are_fetched_and_cached through a stub; live redirects are exercised by site builds."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        """Decline the redirect so urllib raises it as an HTTPError. Not tested directly; exercised by live site builds."""
+        return None
+
+
+def redirect_location(url: str, headers: dict | None = None, timeout: float = 60.0) -> str | None:
+    """Request a URL without following redirects and return the Location of a 3xx, or None when it answers directly. Tested through a stub in test_site.py::test_release_assets_are_fetched_and_cached; live GitHub redirects are exercised by site builds."""
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    try:
+        with urllib.request.build_opener(_NoRedirect).open(req, timeout=timeout):
+            return None
+    except urllib.error.HTTPError as exc:
+        if exc.code in (301, 302, 303, 307, 308) and exc.headers.get("Location"):
+            return exc.headers["Location"]
+        body = exc.read()[:300].decode("utf-8", "replace") if hasattr(exc, "read") else ""
+        raise RuntimeError(f"HTTP {exc.code} from {url.split('?')[0]}: {body.strip()}") from exc
+
+
 def download(asset: Asset, dest: Path, retries: int = 3) -> Path:
     """Stream an asset to dest through a .part file with progress logging, resume and retries, then validate and rename. Tested by test_fetch.py::test_asset_download_skip_and_repair with file:// URLs; HTTP resume is not tested."""
     dest.parent.mkdir(parents=True, exist_ok=True)

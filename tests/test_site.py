@@ -97,8 +97,8 @@ def test_bundle_and_folder_dataset(tmp_path):
 
 
 def test_release_assets_are_fetched_and_cached(monkeypatch):
-    """Checks a release asset is found by name, downloaded once with the token only on the API call, then served from cache, and a missing asset names what exists. Covers release_asset with stubbed HTTP; real GitHub is exercised by releases."""
-    calls = []
+    """Checks a release asset is found by name, fetched through the asset API with the token, downloaded from the signed address without it, served from cache, and that without a token the public download link is used; a missing asset names what exists. Covers release_asset with stubbed HTTP; real GitHub is exercised by site builds."""
+    calls, redirects = [], []
     payload = io.BytesIO()
     with zipfile.ZipFile(payload, "w") as z:
         z.writestr("d/playlist.sos", "data = x.mp4\n")
@@ -107,16 +107,23 @@ def test_release_assets_are_fetched_and_cached(monkeypatch):
         """Serve release metadata or the asset bytes. Test helper; not itself tested."""
         calls.append((url, dict(headers or {})))
         if "/releases/tags/" in url:
-            return json.dumps({"assets": [{"name": "d.zip", "browser_download_url": "https://dl/d.zip"}]}).encode()
+            return json.dumps({"assets": [{"name": "d.zip", "url": "https://api/assets/1",
+                                           "browser_download_url": "https://dl/d.zip"}]}).encode()
         return payload.getvalue()
 
     monkeypatch.setenv("GH_TOKEN", "t0ken")
     monkeypatch.setattr(site, "http_request", fake)
+    monkeypatch.setattr(site, "redirect_location", lambda url, headers: (redirects.append((url, headers)), "https://signed/d.zip")[1])
     p = site.release_asset("o/r", "v0.1.0", "d.zip")
-    assert zipfile.is_zipfile(p) and len(calls) == 2
+    assert zipfile.is_zipfile(p) and len(calls) == 2 and calls[1][0] == "https://signed/d.zip"
     assert calls[0][1]["Authorization"] == "Bearer t0ken" and "Authorization" not in calls[1][1]
+    assert redirects == [("https://api/assets/1", {"Accept": "application/octet-stream", "Authorization": "Bearer t0ken"})]
     site.release_asset("o/r", "v0.1.0", "d.zip")
     assert len(calls) == 2
+    monkeypatch.delenv("GH_TOKEN")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    site.release_asset("o/r", "v0.2.0", "d.zip")
+    assert calls[-1][0] == "https://dl/d.zip" and len(redirects) == 1
     with pytest.raises(RecipeError, match="has: d.zip"):
         site.release_asset("o/r", "v0.1.0", "other.zip")
 
