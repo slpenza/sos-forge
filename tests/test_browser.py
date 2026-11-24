@@ -396,6 +396,28 @@ def test_whats_new_lists_visitor_changes(browser, origin):
     assert problems == []
 
 
+SMALLEST_TEXT = """() => {
+  let min = [99, ''];
+  for (const e of document.querySelectorAll('body *')) {
+    if (!e.offsetParent || e.matches('.sr-only, .ask-hd') || e.closest('[aria-hidden="true"]')) continue;
+    if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+    const px = parseFloat(getComputedStyle(e).fontSize);
+    if (px < min[0]) min = [px, e.tagName.toLowerCase() + '.' + e.className + ' ' + e.textContent.trim().slice(0, 20)];
+  }
+  return min;
+}"""
+
+
+@pytest.mark.parametrize("path", ["/", "/simulator.html?d=tiny", "/changes.html", "/404.html"])
+def test_no_text_is_smaller_than_14px(browser, origin, path):
+    """Checks every visible line of text on each site page is at least 14 px, the floor set for older readers (design/v0/v0.5.3.md). Covers site.css's sizes against the built pages; Help's are checked by test_home_ask_box_hands_the_question_to_help."""
+    page, problems = open_page(browser, origin, path)
+    page.wait_for_timeout(800)
+    px, where = page.evaluate(SMALLEST_TEXT)
+    assert px >= 14 - 0.05, f"{path}: {px}px at {where}"
+    assert problems == []
+
+
 def test_download_urls_cover_every_choice(origin):
     """Checks the smoke check's lists cover each dataset's own downloads, every length in both text styles, and every version's preview and labels, all of which the built site serves. Covers tools/smoke.py download_urls and preview_paths; this test is not itself tested."""
     import urllib.request
@@ -413,7 +435,7 @@ def test_download_urls_cover_every_choice(origin):
 
 
 def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
-    """Checks the home page shows Ask & Answer's box beside "Read the help" with no errors, that asking takes the reader to /help/#ask=<question>, that Help takes the question out of the address and shows the desk layout's panel, and that a build without Ask & Answer has no box. Covers js/ask.js, the pinned box() and the help layout under the deployed CSPs; the API refuses localhost, so no question is really asked."""
+    """Checks the home page shows Ask & Answer's box beside "Read the help" with no errors, that asking takes the reader to /help/#ask=<question>, that Help takes the question out of the address and shows the desk layout's panel with no text under 14 px and its heading kept only for screen readers, and that a build without Ask & Answer has no box. Covers js/ask.js, the pinned box() and the help layout under the deployed CSPs; the API refuses localhost, so no question is really asked."""
     url, _ = origin_ask
     page, problems = open_page(browser, url, "/")
     box = page.locator("#ask-box.ask-box")
@@ -429,5 +451,11 @@ def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
     page.wait_for_function("() => !location.hash", timeout=10000)
     assert any(u.endswith("/help/#ask=How%20do%20I%20make%20a%20movie%20longer%3F") for u in seen), seen
     assert page.locator(".ask-panel").count() >= 1
+    # Help reads at the site's size: no text under 14 px, and the panel's heading off screen but there for screen readers.
+    page.wait_for_selector("main .idx a")
+    px, where = page.evaluate(SMALLEST_TEXT)
+    assert px >= 14 - 0.05, f"help: {px}px at {where}"
+    heading = page.locator(".ask-panel .ask-hd")
+    assert heading.count() == 1 and heading.evaluate("e => e.getBoundingClientRect().height") <= 1
     plain, _ = open_page(browser, origin, "/")
     assert plain.locator("#ask-box").count() == 0 and plain.locator('link[href="ask/ask-panel.css"]').count() == 0

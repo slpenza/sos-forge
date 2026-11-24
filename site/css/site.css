@@ -3,7 +3,7 @@
 :root {
   color-scheme: dark;
   --bg: #0b0d12; --panel: #12151d; --panel-2: #181c26; --rule: #262b38;
-  --fg: #e8eaef; --muted: #a3abba; --faint: #747d8e;
+  --fg: #e8eaef; --muted: #a3abba; --faint: #8a93a3;   /* faint: at least 5.5:1 on every surface */
   --accent: #ffb000; --accent-ink: #1a1200; --accent-soft: rgba(255, 176, 0, .14);
   --radius: 10px; --gap: clamp(12px, 2.2vw, 24px);
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -14,12 +14,13 @@
   --doc-rule: var(--rule); --doc-rule-soft: var(--panel-2); --doc-rule-strong: var(--faint); --doc-code-bg: var(--panel-2);
   --doc-accent: var(--accent); --doc-accent-hover: #ffd27a; --doc-font-sans: var(--font); --doc-font-mono: var(--mono);
   --ask-bg: var(--panel); --ask-field-bg: var(--panel-2); --ask-dim: var(--faint); --ask-on-accent: var(--accent-ink);
-  --ask-hue: var(--accent); --ask-size: 15px;
+  --ask-hue: var(--accent); --ask-size: 17px;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 var(--font); }
+/* 17px base, and nothing smaller than .85rem (about 14.5px) anywhere: the site's readers include older visitors. */
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font); }
 a { color: var(--accent); }
-code { font: .9em var(--mono); background: var(--panel-2); padding: .1em .35em; border-radius: 4px; }
+code { font-family: var(--mono); font-size: max(14px, .9em); background: var(--panel-2); padding: .1em .35em; border-radius: 4px; }
 h1, h2, h3 { line-height: 1.2; margin: 0 0 .5em; }
 
 .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px;
@@ -63,13 +64,13 @@ main.narrow { max-width: 860px; }
 .card-body { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 16px; flex: 1; }
 .card h2 { font-size: 1.15rem; margin: 0; }
 .card p { color: var(--muted); margin: 0; flex: 1; }
-.card p.source { flex: 0 0 auto; font-size: .82rem; color: var(--faint); }
+.card p.source { flex: 0 0 auto; font-size: .85rem; color: var(--faint); }
 .card p.source a { color: var(--muted); text-decoration-color: var(--rule); }
 .card p.source a:hover { color: var(--accent); }
-.card p.catalog { flex: 0 0 auto; font-size: .82rem; margin-top: -4px; }
+.card p.catalog { flex: 0 0 auto; font-size: .85rem; margin-top: -4px; }
 .card p.catalog a { color: var(--accent); }
 .pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.badge { font-size: .78rem; color: var(--muted); border: 1px solid var(--rule); padding: 1px 9px; border-radius: 999px;
+.badge { font-size: .85rem; color: var(--muted); border: 1px solid var(--rule); padding: 1px 9px; border-radius: 999px;
   font-variant-numeric: tabular-nums; white-space: nowrap; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
 .versions { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 12px; }
@@ -101,7 +102,7 @@ body.sim { display: flex; flex-direction: column; min-height: 100dvh; }
 .views { display: flex; flex-wrap: wrap; gap: 6px; }
 .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .panel h2 { font-size: 1.15rem; margin: 6px 0 0; }
-.panel h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); margin: 0 0 4px; }
+.panel h3 { font-size: .85rem; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); margin: 0 0 4px; }
 .panel p { margin: 0; color: var(--muted); }
 .panel ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
 .panel section[hidden] { display: none; }
@@ -128,7 +129,7 @@ body.sim { display: flex; flex-direction: column; min-height: 100dvh; }
 .whats-new li, .changes li { color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
 .whats-new li time { color: var(--faint); font-size: .85rem; margin-right: 4px; white-space: nowrap; }
 .whats-new > a { display: inline-block; margin-top: 10px; color: var(--accent); font-size: .9rem; }
-.kind { display: inline-block; font-size: .75rem; line-height: 1.6; padding: 0 8px; margin-right: 4px; border-radius: 999px;
+.kind { display: inline-block; font-size: .85rem; line-height: 1.6; padding: 0 8px; margin-right: 4px; border-radius: 999px;
   border: 1px solid var(--rule); color: var(--fg); white-space: nowrap; vertical-align: 1px; }
 .changes .change { padding: 18px 0; border-top: 1px solid var(--rule); }
 .changes .change:first-child { border-top: 0; padding-top: 0; }
@@ -137,3 +138,6 @@ body.sim { display: flex; flex-direction: column; min-height: 100dvh; }
 .changes h2 time { color: var(--fg); }
 .changes .ver { color: var(--faint); font-family: var(--mono); font-size: .85rem; }
 .changes a.ver:hover { color: var(--accent); }
+
+/* Ask & Answer's box on the home page: its Ask button is a ratio of --ask-size, held to the site's floor. */
+.home-ask .ask-boxbtn { font-size: max(14px, .78em); }

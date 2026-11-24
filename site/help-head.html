@@ -10,7 +10,7 @@
     --doc-bg: #0b0d12;
     --doc-fg: #e8eaef;
     --doc-muted: #a3abba;
-    --doc-faint: #747d8e;
+    --doc-faint: #8a93a3;
     --doc-bar-bg: #12151d;
     --doc-rule: #262b38;
     --doc-rule-soft: #1b1f2a;
@@ -26,14 +26,29 @@
     /* Ask & Answer's panel on the landing (layout "desk"): its own surfaces, dark whatever the reader's OS prefers. */
     --ask-bg: #12151d;
     --ask-field-bg: #181c26;
-    --ask-dim: #747d8e;
+    --ask-dim: #8a93a3;
     --ask-on-accent: #1a1200;
     --ask-ok-bg: #12201a;
     --ask-ok-rule: #2a4a3a;
     --ask-ok-fg: #5fd39e;
     --ask-hue: #ffb000;
-    --ask-size: 15px;
+    --ask-size: 17px;
+    /* The site's 17px base: every Help text size is a ratio of these (design/v0/v0.5.3.md). */
+    --doc-size: 17px;
+    --doc-leading: 1.7;
   }
+  /* The site's side gutter, so on a phone the question box is as wide as the home page's. */
+  main { padding-left: clamp(12px, 2.2vw, 24px); padding-right: clamp(12px, 2.2vw, 24px); }
+  /* The panel's heading stays for screen readers and goes from the screen: the bar already says Help. */
+  .ask-panel .ask-hd { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip: rect(0 0 0 0);
+    white-space: nowrap; }
+  /* Nothing under 14px: the topic list's group names, file names and summaries, code, and the Ask button. */
+  main .idx h2 { font-size: 14px; }
+  main .pages a { font-size: 17px; }
+  main .pages a > small { font-size: 14px; }
+  main .pages a > .sum { font-size: 15.5px; line-height: 1.55; }
+  main .doc code, main .doc pre code { font-size: max(14px, .8125em); }
+  main .ask-panel .ask-askbtn, main .ask-panel .ask-astate p { font-size: 14px; }
   .sf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding: 12px 20px; }
   .sf-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--doc-fg); font-weight: 700; text-decoration: none; }
   .sf-nav { display: flex; flex-wrap: wrap; gap: 4px 18px; }
