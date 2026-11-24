@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from conftest import write_recipe
 from sosforge.build import size_label
-from sosforge.package import playlist_text, readme_text
+from sosforge.package import length_label, playlist_text, readme_text
 from sosforge.recipe import load_recipe
 
 TOML = '''[dataset]
@@ -21,6 +21,11 @@ bogus = 1
 type = "basemap"
 color = "#000000"
 '''
+
+
+def test_length_label():
+    """Checks movie lengths read as seconds, whole minutes, or minutes and seconds. Covers length_label; this test is not itself tested."""
+    assert [length_label(s) for s in (20, 40, 60, 90, 120, 72)] == ["20 s", "40 s", "1 min", "1 min 30 s", "2 min", "1 min 12 s"]
 
 
 def test_playlist_and_readme(tmp_path):

@@ -21,7 +21,8 @@ sos build coffee_shops --preview           # 1024x512 in seconds -> dist/coffee_
 sos build coffee_shops                     # 4096x2048 -> dist/coffee_shops/
 sos still lunar_phases 180 --preview       # one PNG for a quick look
 sos check where_the_world_plays            # fetch data + run checks, no rendering
-sos bundle where_the_world_plays           # zip the built folders for a GitHub Release
+sos build getting_richer --seconds 120     # another length -> dist/getting_richer_120s/
+sos bundle where_the_world_plays           # zip every built folder and length for a GitHub Release
 sos site --dist dist --serve               # gallery + simulator + help at http://localhost:8040/
 ```
 
@@ -135,6 +136,8 @@ node --test site/js/*.test.mjs          # simulator logic
   hand. It refuses an unscoped or mismatched tag, then tests, builds and creates the GitHub Release.
 - **Rendered datasets go on a data release first**, so the version's site deploy can download them:
   `sos bundle <slug>`, then `gh release create data-YYYY-MM <zips>`, then list them in `site/site.toml`. A
-  `data-*` tag deploys nothing.
+  `data-*` tag deploys nothing. Extra lengths are built with `sos build <slug> --seconds N`, bundled by the same
+  `sos bundle`, and listed as `lengths = [N, ...]`. `sos site` refuses to deploy a download, or a length, that its
+  release doesn't hold.
 
 MIT licence. Built for NOAA SOS sites, museums and science centres.

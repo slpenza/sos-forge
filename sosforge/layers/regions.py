@@ -69,6 +69,7 @@ def nice_ticks(vmin: float, vmax: float, log: bool) -> list[float]:
 class RegionsLayer(Layer):
     """Countries or other polygons shaded by a yearly value. Tested by test_v3_layers.py."""
 
+    VERSION = 2   # 2: regions sharing a code all get its values (Australia), so caches made before must rebuild
     OPTIONS = {"regions": REQUIRED, "data": REQUIRED, "scale": "linear", "min": None, "max": None, "colormap": "wealth",
                "opacity": 0.85, "no_data_color": "#2a2f3a", "no_data_opacity": 0.55, "border_color": "#ffffff",
                "border_opacity": 0.22, "year": None, "legend": True, "legend_title": "", "legend_format": "{:,.0f}",

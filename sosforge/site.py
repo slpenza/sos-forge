@@ -28,7 +28,7 @@ from .timeline import parse_date
 LOG = logging.getLogger("sosforge.site")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SITE_KEYS = {"domain", "repo", "ask_release", "ask_projects", "preview_width"}
-DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist", "dates"}
+DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist", "dates", "lengths", "per", "label_style", "sources"}
 STATIC_SKIP = (".test.mjs", "help-head.html", "help-bar.html", "site.toml")
 PANEL_FILES = ("ask-client.js", "ask-panel.js", "ask-panel.css")
 HELP_KEYS = {"release", "bar", "title", "groups", "landing"}
@@ -95,18 +95,41 @@ def load_config(path: Path) -> dict:
             raise RecipeError(f"[[datasets]] needs a unique slug (got {d.get('slug')!r})")
         if not d.get("dist") and not (d.get("release") and d.get("preview")):
             raise RecipeError(f"[[datasets]] {d['slug']}: give release + preview (a zip on that release) or dist (a folder)")
+        lengths = d.get("lengths", [])
+        label_style = d.get("label_style", False)
+        if not isinstance(label_style, bool):
+            raise RecipeError(f"[[datasets]] {d['slug']}: label_style is true or false")
+        if lengths or label_style:
+            if not (isinstance(lengths, list) and all(isinstance(s, int) and s > 0 for s in lengths)
+                    and len(set(lengths)) == len(lengths)):
+                raise RecipeError(f"[[datasets]] {d['slug']}: lengths must be distinct whole seconds, such as [20, 120]")
+            if not d.get("release") or not d.get("downloads"):
+                raise RecipeError(f"[[datasets]] {d['slug']}: lengths and label_style need a release and downloads to "
+                                  "name them after")
+            bad = [n for n in d["downloads"] if not n.startswith(f"{d['slug']}_")]
+            if bad:
+                raise RecipeError(f"[[datasets]] {d['slug']}: lengths and styles are named <slug>_<N>s_..., so every "
+                                  f"download must start with {d['slug']}_ (not {', '.join(bad)})")
+        per = d.get("per")
+        if per is not None and not (isinstance(per, dict) and set(per) == {"unit", "count"} and isinstance(per["unit"], str)
+                                    and per["unit"].strip() and isinstance(per["count"], (int, float)) and per["count"] > 0):
+            raise RecipeError(f'[[datasets]] {d["slug"]}: per must be like {{ unit = "sport", count = 9 }}')
+        sources = d.get("sources", [])
+        if not (isinstance(sources, list) and all(isinstance(x, dict) and set(x) == {"label", "url"} and str(x["label"]).strip()
+                                                  and str(x["url"]).startswith("https://") for x in sources)):
+            raise RecipeError(f'[[datasets]] {d["slug"]}: sources must be like [{{ label = "...", url = "https://..." }}]')
         seen.add(d["slug"])
-        cfg["datasets"].append({"slug": d["slug"], "release": d.get("release"), "preview": d.get("preview"),
+        cfg["datasets"].append({"per": per, "sources": sources, "slug": d["slug"], "release": d.get("release"), "preview": d.get("preview"),
                                 "downloads": list(d.get("downloads", [])), "dist": d.get("dist"),
-                                "dates": d.get("dates")})
+                                "dates": d.get("dates"), "lengths": sorted(lengths), "label_style": label_style})
     return cfg
 
 
 def bundle(slug: str, dist: Path) -> list[Path]:
-    """Zip every built folder for a slug (dist/<slug>, dist/<slug>_<codec>) as dist/<folder>_<size>.zip for a release. Tested by test_site.py::test_bundle_and_folder_dataset."""
+    """Zip every built folder for a slug (dist/<slug>, dist/<slug>_<codec>, and the length variants dist/<slug>_<N>s[_<codec>]) as dist/<folder>_<size>[_<codec>].zip for a release. Tested by test_site.py::test_bundle_and_folder_dataset and test_build.py::test_length_variant_build."""
     dist = Path(dist)
     folders = sorted(p for p in dist.glob(f"{slug}*") if p.is_dir() and (p / "playlist.sos").exists()
-                     and (p.name == slug or re.fullmatch(rf"{re.escape(slug)}_(h264|mpeg4)", p.name)))
+                     and re.fullmatch(rf"{re.escape(slug)}(_\d+s)?(_(labels|panels))?(_(h264|mpeg4))?", p.name))
     if not folders:
         raise RecipeError(f"no built folders for {slug!r} in {dist} (run sos build {slug} first)")
     out = []
@@ -217,13 +240,77 @@ def date_label(start, end) -> str:
     return day(a) if a.date() == b.date() else f"{day(a)} – {day(b)}"
 
 
-def recipe_dates(slug: str, recipes: Path = REPO_ROOT / "recipes") -> str | None:
-    """Return the date label of the recipe named by a dataset's slug from its [animation] start and end, or None when there is no such recipe or span. Tested by test_site.py::test_recipe_dates against the repo's own recipes."""
+def recipe_span(slug: str, recipes: Path = REPO_ROOT / "recipes") -> tuple | None:
+    """Return the (start, end) UTC datetimes of the recipe named by a dataset's slug, or None when there is no such recipe or span. Tested by test_site.py::test_recipe_dates against the repo's own recipes."""
     path = recipes / slug / "recipe.toml"
     if not path.is_file():
         return None
     anim = tomllib.loads(path.read_text()).get("animation", {})
-    return date_label(anim["start"], anim["end"]) if anim.get("start") and anim.get("end") else None
+    return (parse_date(anim["start"]), parse_date(anim["end"])) if anim.get("start") and anim.get("end") else None
+
+
+def recipe_dates(slug: str, recipes: Path = REPO_ROOT / "recipes") -> str | None:
+    """Return the date label of the recipe named by a dataset's slug, or None without a span. Tested by test_site.py::test_recipe_dates against the repo's own recipes."""
+    span = recipe_span(slug, recipes)
+    return date_label(*span) if span else None
+
+
+def recipe_years(slug: str, recipes: Path = REPO_ROOT / "recipes") -> float | None:
+    """Return how many years the recipe's span covers, the step a dated movie's pace is measured in, or None for spans under two years. Tested by test_site.py::test_lengths_and_download_checks."""
+    span = recipe_span(slug, recipes)
+    years = (span[1] - span[0]).days / 365.2425 if span else 0
+    return round(years, 2) if years >= 2 else None
+
+
+def variant_name(name: str, slug: str, seconds: int | None = None, style: str | None = None) -> str:
+    """Return a release asset's name for a length or text-style variant as sos bundle names it: getting_richer_4k.zip becomes getting_richer_120s_4k.zip, getting_richer_labels_4k.zip or getting_richer_120s_labels_4k.zip. Tested by test_site.py::test_lengths_and_download_checks."""
+    return f"{slug}{f'_{seconds}s' if seconds else ''}{f'_{style}' if style else ''}_{name[len(slug) + 1:]}"
+
+
+def variant_names(d: dict) -> list[str]:
+    """Return the release assets a dataset's extra lengths and SOS-labels style need: MPEG-4 only (the first download), since the standard length's H.264 zip already serves previews and codec tests. Tested by test_site.py::test_lengths_and_download_checks."""
+    first = d["downloads"][0]
+    names = [variant_name(first, d["slug"], s) for s in d["lengths"]]
+    if d["label_style"]:
+        names += [variant_name(first, d["slug"], s, "labels") for s in [None, *d["lengths"]]]
+    return names
+
+
+def length_entries(d: dict, repo: str, duration_s: float) -> list[dict]:
+    """Return a dataset's lengths for datasets.json, shortest first: its own (the preview's, with every download) and each extra one (MPEG-4), each with its SOS-labels download when the dataset offers that style. Tested by test_site.py::test_lengths_and_download_checks."""
+    url = lambda n: {"label": n, "url": f"https://github.com/{repo}/releases/download/{d['release']}/{n}"}
+    first = d["downloads"][0]
+    own = {"seconds": round(duration_s), "default": True, "downloads": [url(n) for n in d["downloads"]]}
+    extra = [{"seconds": s, "default": False, "downloads": [url(variant_name(first, d["slug"], s))]} for s in d["lengths"]]
+    entries = sorted([own, *extra], key=lambda x: x["seconds"])
+    for e in entries:
+        e["labels"] = (url(variant_name(first, d["slug"], None if e["default"] else e["seconds"], "labels"))
+                       if d["label_style"] else None)
+    return entries
+
+
+def missing_downloads(repo: str, datasets: list[dict], listed: dict | None = None) -> list[str]:
+    """Return every download (including length and text-style variants) that its release does not hold, listing each release once; a release that can't be listed is warned about and skipped. Tested by test_site.py::test_lengths_and_download_checks with stubbed HTTP."""
+    listed = {} if listed is None else listed
+    missing = []
+    for d in datasets:
+        if not d["release"] or not d["downloads"]:
+            continue
+        names = d["downloads"] + variant_names(d)
+        if d["release"] not in listed:
+            token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+            try:
+                meta = json.loads(http_request(f"https://api.github.com/repos/{repo}/releases/tags/{d['release']}",
+                                               headers={"Accept": "application/vnd.github+json",
+                                                        **({"Authorization": f"Bearer {token}"} if token else {})},
+                                               retries=3))
+                listed[d["release"]] = {a.get("name") for a in meta.get("assets", [])}
+            except RuntimeError as exc:
+                LOG.warning("could not list release %s to check its downloads: %s", d["release"], exc)
+                listed[d["release"]] = None
+        if listed[d["release"]] is not None:
+            missing += [f"{d['release']}/{n}" for n in names if n not in listed[d["release"]]]
+    return missing
 
 
 def dataset_entry(folder: Path, slug: str, out: Path, width: int, ffmpeg: str, downloads: list[dict],
@@ -314,9 +401,14 @@ def point_help_at_docs(out: Path, repo: str) -> int:
 
 
 def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_checkout: Path | None = None,
-               ask_base: str | None = None, strict_ask: bool = False) -> dict:
+               ask_base: str | None = None, strict_ask: bool = False, check_downloads: bool = False) -> dict:
     """Assemble the whole site into `out` and return the manifest written as datasets.json. Tested by test_site.py::test_build_site_end_to_end."""
     cfg = load_config(config_path)
+    if check_downloads:
+        missing = missing_downloads(cfg["repo"], cfg["datasets"])
+        if missing:
+            raise RecipeError("site.toml links downloads its releases don't hold (upload them with "
+                              f"gh release upload): {', '.join(missing)}")
     out = Path(out)
     if out.exists():
         shutil.rmtree(out)
@@ -334,8 +426,13 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ch
             folder = Path(d["dist"])
         else:
             folder = unzip_folder(release_asset(cfg["repo"], d["release"], d["preview"]), work / d["slug"])
-        entries.append(dataset_entry(folder, d["slug"], out, cfg["preview_width"], ffmpeg, downloads,
-                                     d.get("dates") or recipe_dates(d["slug"])))
+        entry = dataset_entry(folder, d["slug"], out, cfg["preview_width"], ffmpeg, downloads,
+                              d.get("dates") or recipe_dates(d["slug"]))
+        entry["lengths"] = length_entries(d, cfg["repo"], entry["duration_s"]) if entry["kind"] == "movie" and d["release"] else []
+        entry["sources"] = d["sources"]
+        years = recipe_years(d["slug"])
+        entry["per"] = d.get("per") or ({"unit": "year", "count": years} if years else None)
+        entries.append(entry)
         LOG.info("dataset %s ready", d["slug"])
     manifest = {"datasets": entries}
     (out / "datasets.json").write_text(json.dumps(manifest, indent=1))

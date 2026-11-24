@@ -48,6 +48,8 @@ class BuildOptions:
     preview: bool = False
     width: int | None = None
     frames: int | None = None
+    seconds: int | None = None
+    hud: str | None = None
     fps: int | None = None
     workers: int = field(default_factory=default_workers)
     codecs: list[str] | None = None
@@ -65,22 +67,51 @@ def size_label(width: int) -> str:
     return {8192: "8k", 4096: "4k", 2048: "2k", 1024: "1k"}.get(width, f"{width}x{width // 2}")
 
 
+def apply_text_style(recipe: Recipe, opts: BuildOptions) -> str | None:
+    """Switch the recipe's text between panels painted into the frames and SOS labels for --hud, returning the style to tag outputs with, or None when it is the recipe's own. Tested by test_build.py::test_length_variant_build."""
+    if opts.hud is None:
+        return None
+    if opts.hud not in ("panels", "labels"):
+        raise RecipeError("--hud must be panels (text painted into the picture) or labels (SOS draws labels.txt)")
+    if not recipe.is_movie or not recipe.hud["enabled"]:
+        raise RecipeError("--hud chooses how a movie's text is shown; this recipe has no movie text")
+    if opts.hud == recipe.hud["mode"]:
+        return None
+    recipe.hud["mode"] = opts.hud
+    return opts.hud
+
+
+def length_tag(recipe: Recipe, ctx: BuildContext, opts: BuildOptions) -> int | None:
+    """Return the seconds a --seconds build tags its files with, or None when it is the recipe's own length. Tested by test_build.py::test_length_variant_build."""
+    if not opts.seconds or ctx.timeline.frames == int(recipe.animation["frames"]):
+        return None
+    return int(opts.seconds)
+
+
 def make_context(recipe: Recipe, opts: BuildOptions) -> BuildContext:
     """Resolve resolution, frame count and folders for a build from the recipe and overrides. Tested by test_build.py::test_texture_build_end_to_end."""
     width = PREVIEW_WIDTH if opts.preview else int(opts.width or recipe.dataset["width"])
     if width % 4 or width < 64:
         raise RecipeError("width must be a multiple of 4 and >= 64")
     a = recipe.animation
-    frames = int(opts.frames or a["frames"]) if recipe.is_movie else 1
-    timeline = Timeline(frames, int(opts.fps or a["fps"]), bool(a["loop"]) if recipe.is_movie else False,
-                        a["start"], a["end"])
+    fps = int(opts.fps or a["fps"])
+    if opts.seconds is not None:
+        if not recipe.is_movie:
+            raise RecipeError("--seconds sets a movie's length; this recipe makes a still image")
+        if opts.frames:
+            raise RecipeError("give --frames or --seconds, not both")
+        if int(opts.seconds) < 1:
+            raise RecipeError("--seconds must be a whole number of seconds, 1 or more")
+    frames = (int(opts.seconds) * fps if opts.seconds else int(opts.frames or a["frames"])) if recipe.is_movie else 1
+    timeline = Timeline(frames, fps, bool(a["loop"]) if recipe.is_movie else False, a["start"], a["end"])
     return BuildContext(recipe, width, timeline, Path(opts.build_dir) / recipe.slug / f"{width}x{width // 2}",
                         max(1, opts.workers), opts.refresh)
 
 
 def context_from_args(args: dict) -> BuildContext:
-    """Rebuild a BuildContext inside a worker from BuildContext.to_args(). Tested indirectly by test_build.py::test_movie_build_end_to_end."""
+    """Rebuild a BuildContext inside a worker from BuildContext.to_args(), carrying over a --hud text style the main process applied. Tested by test_build.py::test_movie_build_end_to_end and test_length_variant_build."""
     recipe = load_recipe(args["recipe"])
+    recipe.hud["mode"] = args.get("hud_mode", recipe.hud["mode"])
     a = recipe.animation
     timeline = Timeline(args["frames"], args["fps"], bool(a["loop"]) if recipe.is_movie else False, a["start"], a["end"])
     return BuildContext(recipe, args["width"], timeline, Path(args["build_dir"]), args["workers"], False)
@@ -266,6 +297,7 @@ def build(ref, opts: BuildOptions | None = None) -> dict:
     recipe = load_recipe(ref)
     for w in recipe.warnings:
         LOG.warning(w)
+    style = apply_text_style(recipe, opts)
     ctx = make_context(recipe, opts)
     layers = make_layers(ctx)
     prepare_layers(ctx, layers)
@@ -275,7 +307,9 @@ def build(ref, opts: BuildOptions | None = None) -> dict:
     log_checks(checks, LOG)
     if opts.strict and not all(c.passed for c in checks):
         raise BuildError("verification failed (use --no-strict to build anyway)")
-    stem = f"{recipe.dataset['stem']}_{size_label(ctx.width)}"
+    length = length_tag(recipe, ctx, opts)
+    tag = (f"_{length}s" if length else "") + (f"_{style}" if style else "")
+    stem = f"{recipe.dataset['stem']}{tag}_{size_label(ctx.width)}"
     summary = {"recipe": str(recipe.path), "width": ctx.width, "height": ctx.height,
                "settings": {"width": ctx.width, "frames": ctx.timeline.frames, "fps": ctx.timeline.fps,
                             "layers": recipe.layers, "hud": recipe.hud, "encode": recipe.encode}}
@@ -309,19 +343,20 @@ def build(ref, opts: BuildOptions | None = None) -> dict:
     summary["checks"] = [asdict(c) for c in checks]
     credits, licenses = gather_credits(recipe, layers)
     suffix = "_preview" if opts.preview else ""
-    dist = Path(opts.out_dir) / (recipe.slug + suffix)
+    dist = Path(opts.out_dir) / (recipe.slug + tag + suffix)
     labels = ctx.build_dir / "labels.txt" if recipe.is_movie and recipe.hud["enabled"] else None
-    files = build_package(recipe, out, dist, summary, credits, licenses, labels=labels)
+    files = build_package(recipe, out, dist, summary, credits, licenses, labels=labels, length=length, style=style)
     variants = {}
     for c in list(outputs)[1:]:
-        vdir = Path(opts.out_dir) / f"{recipe.slug}_{c}{suffix}"
+        vdir = Path(opts.out_dir) / f"{recipe.slug}{tag}_{c}{suffix}"
         vfiles = build_package(recipe, outputs[c], vdir, {**summary, "video": summary["videos"][c]}, credits,
-                               licenses, variant=c, primary=(codecs[0], dist.name), labels=labels)
+                               licenses, variant=c, primary=(codecs[0], dist.name), labels=labels, length=length,
+                               style=style)
         variants[c] = {k: str(v) for k, v in vfiles.items()}
     summary.update(files={k: str(v) for k, v in files.items()}, variants=variants, credits=credits,
                    licenses=licenses, total_s=round(time.monotonic() - t_start, 1))
     LOG.info("built %s in %.1fs -> %s", recipe.slug, summary["total_s"],
-             ", ".join([str(dist)] + [str(Path(opts.out_dir) / f"{recipe.slug}_{c}{suffix}") for c in variants]))
+             ", ".join([str(dist)] + [str(Path(opts.out_dir) / f"{recipe.slug}{tag}_{c}{suffix}") for c in variants]))
     return summary
 
 

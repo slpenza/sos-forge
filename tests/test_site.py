@@ -59,6 +59,56 @@ def test_recipe_dates():
     assert site.recipe_dates("where_the_world_plays") is None and site.recipe_dates("no_such_recipe") is None
 
 
+def test_lengths_and_download_checks(tmp_path, monkeypatch):
+    """Checks lengths in site.toml are validated, named as sos bundle names them (extra lengths and the SOS-labels style as MPEG-4 only), listed shortest first with the preview's own length marked, and that a build checking downloads fails on a missing asset but only warns when a release can't be listed. Covers load_config lengths, per, label_style and sources, variant_name, variant_names, length_entries, missing_downloads, recipe_years and build_site's check with stubbed HTTP; this test is not itself tested."""
+    head = '[site]\ndomain="d"\n[[datasets]]\nslug="gr"\nrelease="data-1"\npreview="gr_4k_h264.zip"\n'
+    cfg = tmp_path / "s.toml"
+    for body, msg in (('downloads=["gr_4k.zip"]\nlengths=[20, 20]\n', "distinct"), ('downloads=["gr_4k.zip"]\nlengths=[0]\n', "distinct"),
+                      ('lengths=[20]\n', "need a release and downloads"), ('downloads=["other.zip"]\nlengths=[20]\n', "start with gr_")):
+        cfg.write_text(head + body)
+        with pytest.raises(RecipeError, match=msg):
+            site.load_config(cfg)
+    cfg.write_text(head + 'downloads=["gr_4k.zip", "gr_4k_h264.zip"]\nlengths=[120, 20]\n')
+    d = site.load_config(cfg)["datasets"][0]
+    assert d["lengths"] == [20, 120] and site.variant_name("gr_4k_h264.zip", "gr", 120) == "gr_120s_4k_h264.zip"
+    assert site.variant_name("gr_4k.zip", "gr", None, "labels") == "gr_labels_4k.zip"
+    entries = site.length_entries(d, "o/r", 40.4)
+    assert [(e["seconds"], e["default"], len(e["downloads"])) for e in entries] == [(20, False, 1), (40, True, 2), (120, False, 1)]
+    assert entries[2]["downloads"][0] == {"label": "gr_120s_4k.zip", "url": "https://github.com/o/r/releases/download/data-1/gr_120s_4k.zip"}
+    assert all(e["labels"] is None for e in entries)
+    styled = {**d, "label_style": True}
+    assert [e["labels"]["label"] for e in site.length_entries(styled, "o/r", 40.4)] == [
+        "gr_20s_labels_4k.zip", "gr_labels_4k.zip", "gr_120s_labels_4k.zip"]
+    held = {"gr_4k.zip", "gr_4k_h264.zip", "gr_20s_4k.zip", "gr_labels_4k.zip", "gr_20s_labels_4k.zip", "gr_120s_labels_4k.zip"}
+    calls = []
+    monkeypatch.setattr(site, "http_request", lambda url, **kw: (calls.append(url), json.dumps({"assets": [{"name": n} for n in held]}).encode())[1])
+    assert site.missing_downloads("o/r", [d, styled]) == ["data-1/gr_120s_4k.zip"] * 2 and len(calls) == 1
+    with pytest.raises(RecipeError, match="gr_120s_4k.zip"):
+        site.build_site(cfg, tmp_path / "out", check_downloads=True)
+
+    def offline(url, **kw):
+        """Fail like a network outage. Test helper; not itself tested."""
+        raise RuntimeError("request failed")
+    monkeypatch.setattr(site, "http_request", offline)
+    assert site.missing_downloads("o/r", [d]) == []
+    assert site.recipe_years("getting_richer") == pytest.approx(202.0, abs=0.01) and site.recipe_years("where_the_world_plays") is None
+    for per in ('per = "sport"\n', 'per = { unit = "sport", count = 0 }\n', 'per = { unit = "", count = 9 }\n'):
+        cfg.write_text(head + 'downloads=["gr_4k.zip"]\n' + per)
+        with pytest.raises(RecipeError, match="per must be"):
+            site.load_config(cfg)
+    for src in ('sources = [{ label = "X", url = "http://x" }]\n', 'sources = [{ url = "https://x" }]\n', 'sources = "https://x"\n'):
+        cfg.write_text(head + 'downloads=["gr_4k.zip"]\n' + src)
+        with pytest.raises(RecipeError, match="sources must be"):
+            site.load_config(cfg)
+    cfg.write_text(head + 'downloads=["gr_4k.zip"]\nsources = [{ label = "X", url = "https://x.example" }]\n')
+    assert site.load_config(cfg)["datasets"][0]["sources"] == [{"label": "X", "url": "https://x.example"}]
+    cfg.write_text(head + 'downloads=["gr_4k.zip"]\nlabel_style = "yes"\n')
+    with pytest.raises(RecipeError, match="true or false"):
+        site.load_config(cfg)
+    cfg.write_text(head + 'downloads=["gr_4k.zip"]\nper = { unit = "sport", count = 9 }\n')
+    assert site.load_config(cfg)["datasets"][0]["per"] == {"unit": "sport", "count": 9}
+
+
 def test_config_validation(tmp_path):
     """Checks site.toml defaults, and that duplicate slugs, unknown keys and entries without a source are refused. Covers load_config; this test is not itself tested."""
     ok = tmp_path / "ok.toml"
@@ -183,7 +233,7 @@ def test_build_site_end_to_end(tmp_path):
     out = tmp_path / "out"
     manifest = site.build_site(cfg, out, dist=dist, ask_checkout=ask, ask_base="https://ask.example/prod/", strict_ask=True)
     d = manifest["datasets"][0]
-    assert d["dates"] == "Spring 2026"
+    assert d["dates"] == "Spring 2026" and d["sources"] == [] and d["lengths"][0]["default"]
     assert d["slug"] == "tiny" and d["downloads"][0]["url"] == "https://github.com/slpenza/sos-forge/releases/download/v0.1.0/tiny.zip"
     assert json.loads((out / "datasets.json").read_text()) == manifest
     assert json.loads((out / "config.json").read_text()) == {"askProjects": ["sos"], "askBase": "https://ask.example/prod"}

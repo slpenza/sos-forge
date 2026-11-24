@@ -40,7 +40,8 @@ class BuildContext:
     def to_args(self) -> dict:
         """Return plain constructor arguments so worker processes can rebuild an identical context. Tested indirectly by test_build.py::test_movie_build_end_to_end."""
         return {"recipe": str(self.recipe.path), "width": self.width, "frames": self.timeline.frames,
-                "fps": self.timeline.fps, "build_dir": str(self.build_dir), "workers": self.workers}
+                "fps": self.timeline.fps, "build_dir": str(self.build_dir), "workers": self.workers,
+                "hud_mode": self.recipe.hud["mode"]}
 
 
 class FieldStore:

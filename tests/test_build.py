@@ -7,7 +7,10 @@ import cv2
 import pytest
 
 from conftest import earth_png, gpx_loop, write_recipe
-from sosforge.build import BuildError, BuildOptions, build, still
+from sosforge.build import (BuildError, BuildOptions, FrameRenderer, apply_text_style, build, length_tag, make_context,
+                            make_layers, prepare_layers, still)
+from sosforge.recipe import RecipeError, load_recipe
+from sosforge.site import bundle
 
 TEXTURE = '''[dataset]
 name = "Tiny Texture"
@@ -100,6 +103,58 @@ def test_movie_build_end_to_end(tmp_path):
     assert set(only["videos"]) == {"h264"} and not only["variants"] and not (tmp_path / "d2" / "tiny_movie_h264").exists()
     png = still(d, BuildOptions(build_dir=tmp_path / "b", workers=1), 5, tmp_path / "s.png")
     assert cv2.imread(str(png)).shape == (128, 256, 3)
+
+
+def test_length_variant_build(tmp_path):
+    """Checks --seconds renders that many seconds of frames and --hud labels switches the text to SOS labels, both tagging folders, files and playlist names so variants install side by side, bundles them under tagged names, leaves the recipe's own length and style untagged, and refuses bad combinations. Covers make_context, length_tag, apply_text_style, the tagged build outputs, playlist_text, version_note and bundle; this test is not itself tested."""
+    d = make(tmp_path, MOVIE)
+    s = build(d, BuildOptions(out_dir=tmp_path / "dist", build_dir=tmp_path / "b", workers=1, seconds=1))
+    assert all(c["passed"] for c in s["checks"]) and s["videos"]["mpeg4"]["frames"] == 30
+    primary = (tmp_path / "dist" / "tiny_movie_1s" / "playlist.sos").read_text()
+    variant = (tmp_path / "dist" / "tiny_movie_1s_h264" / "playlist.sos").read_text()
+    assert "name = Tiny Movie (1 s)\n" in primary and "data = tiny_movie_1s_256x128.mp4" in primary
+    assert "name = Tiny Movie (1 s, H.264)" in variant and "data = tiny_movie_1s_256x128_h264.mp4" in variant
+    readme = (tmp_path / "dist" / "tiny_movie_1s" / "README.md").read_text()
+    assert "This is the **1 s** version (30 frames at 30 fps)" in readme and "`tiny_movie_1s/`" in (
+        tmp_path / "dist" / "tiny_movie_1s_h264" / "README.md").read_text()
+    assert len((tmp_path / "dist" / "tiny_movie_1s" / "labels.txt").read_text().splitlines()) == 30
+    lab = build(d, BuildOptions(out_dir=tmp_path / "dist", build_dir=tmp_path / "b", workers=2, seconds=1, hud="labels",
+                                codecs=["mpeg4"]))
+    first = lambda p: cv2.VideoCapture(str(p)).read()[1].astype(float)
+    painted = first(tmp_path / "dist" / "tiny_movie_1s" / "tiny_movie_1s_256x128.mp4")
+    plain = first(tmp_path / "dist" / "tiny_movie_1s_labels" / "tiny_movie_1s_labels_256x128.mp4")
+    expect = {}
+    for mode in ("labels", "panels"):
+        r = load_recipe(d)
+        r.hud["mode"] = mode
+        ctx = make_context(r, BuildOptions(build_dir=tmp_path / "b", workers=1, seconds=1))
+        layers = make_layers(ctx)
+        prepare_layers(ctx, layers)
+        expect[mode] = FrameRenderer(ctx, layers).frame(0)[..., ::-1].astype(float)
+    hud = abs(expect["labels"] - expect["panels"]).max(-1) > 30
+    assert hud.any()
+    assert abs(plain - expect["labels"])[hud].mean() < abs(plain - expect["panels"])[hud].mean(), "workers drew panels"
+    assert abs(painted - expect["panels"])[hud].mean() < abs(painted - expect["labels"])[hud].mean()
+    assert all(c["passed"] for c in lab["checks"]) and not (tmp_path / "dist" / "tiny_movie_1s_labels_h264").exists()
+    lp = (tmp_path / "dist" / "tiny_movie_1s_labels" / "playlist.sos").read_text()
+    assert "name = Tiny Movie (1 s, SOS labels)\n" in lp and "data = tiny_movie_1s_labels_256x128.mp4" in lp
+    assert "labelvisible = true" in lp and "labelvisible = false" in primary
+    assert "SOS draws it from `labels.txt`" in (tmp_path / "dist" / "tiny_movie_1s_labels" / "README.md").read_text()
+    assert sorted(z.name for z in bundle("tiny_movie", tmp_path / "dist")) == [
+        "tiny_movie_1s_256x128.zip", "tiny_movie_1s_256x128_h264.zip", "tiny_movie_1s_labels_256x128.zip"]
+    r = load_recipe(d)
+    same = BuildOptions(build_dir=tmp_path / "b", seconds=1, fps=6)
+    assert length_tag(r, make_context(r, same), same) is None
+    for opts, msg in ((BuildOptions(seconds=1, frames=12), "not both"), (BuildOptions(seconds=0), "1 or more")):
+        with pytest.raises(RecipeError, match=msg):
+            make_context(r, opts)
+    with pytest.raises(RecipeError, match="still image"):
+        make_context(load_recipe(make(tmp_path / "t", TEXTURE)), BuildOptions(seconds=10))
+    assert apply_text_style(load_recipe(d), BuildOptions(hud="panels")) is None
+    with pytest.raises(RecipeError, match="panels .* or labels"):
+        apply_text_style(load_recipe(d), BuildOptions(hud="subtitles"))
+    with pytest.raises(RecipeError, match="no movie text"):
+        apply_text_style(load_recipe(make(tmp_path / "t2", TEXTURE)), BuildOptions(hud="labels"))
 
 
 def test_cache_reused_and_invalidated(tmp_path, caplog):

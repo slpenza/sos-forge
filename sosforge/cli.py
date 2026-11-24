@@ -96,6 +96,7 @@ def cmd_list(args) -> int:
 def _opts(args) -> BuildOptions:
     """Translate parsed arguments into BuildOptions. Tested by test_cli.py::test_new_list_check_and_resolve."""
     return BuildOptions(preview=args.preview, width=args.width, frames=getattr(args, "frames", None),
+                        seconds=getattr(args, "seconds", None), hud=getattr(args, "hud", None),
                         fps=getattr(args, "fps", None), workers=args.workers, codecs=getattr(args, "codec", None),
                         crf=getattr(args, "crf", None), preset=getattr(args, "preset", None), out_dir=Path(args.out),
                         build_dir=Path(args.build_dir), refresh=args.refresh, strict=not args.no_strict,
@@ -143,7 +144,8 @@ def cmd_site(args) -> int:
     out = Path(args.out)
     manifest = build_site(Path(args.config), out, dist=Path(args.dist) if args.dist else None,
                           ask_checkout=ask_checkout_path(args.ask_answer),
-                          ask_base=args.ask_base or os.environ.get("SOSFORGE_ASK_BASE"), strict_ask=args.strict_ask)
+                          ask_base=args.ask_base or os.environ.get("SOSFORGE_ASK_BASE"), strict_ask=args.strict_ask,
+                          check_downloads=not args.no_check_downloads)
     print(f"{out}  ({len(manifest['datasets'])} datasets)")
     if args.serve:
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(out))
@@ -178,6 +180,12 @@ def parser() -> argparse.ArgumentParser:
         p.add_argument("--no-strict", action="store_true", help="warn instead of failing on checks")
         if name == "build":
             p.add_argument("--frames", type=int)
+            p.add_argument("--seconds", type=int,
+                           help="movie length in whole seconds at the recipe's fps; a length other than the recipe's "
+                                "tags the output folders and files _<N>s so lengths install side by side")
+            p.add_argument("--hud", choices=["panels", "labels"],
+                           help="show a movie's text painted into the picture (panels) or as SOS labels; a style other "
+                                "than the recipe's tags the outputs _panels or _labels")
             p.add_argument("--fps", type=int)
             p.add_argument("--codec", action="append", choices=["mpeg4", "h264"],
                            help="encode only these codecs (repeatable; first is primary)")
@@ -196,6 +204,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--ask-answer", help="ask-answer checkout (default $SOSFORGE_ASK_ANSWER or ../ask-answer)")
     p.add_argument("--ask-base", help="Ask API base URL (default $SOSFORGE_ASK_BASE)")
     p.add_argument("--strict-ask", action="store_true", help="fail unless the checkout has site.toml's ask_release and [help] release tags")
+    p.add_argument("--no-check-downloads", action="store_true",
+                   help="skip checking that every download (and length) in site.toml is on its release")
     p.add_argument("--serve", type=int, nargs="?", const=8040, help="serve the result locally on this port")
     p.set_defaults(fn=cmd_site)
     return ap

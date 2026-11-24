@@ -11,15 +11,26 @@ from .recipe import Recipe
 
 SOS_SITE_CUSTOM = "/shared/sos/media/site-custom"
 CODEC_NAMES = {"mpeg4": "MPEG-4 Part 2", "h264": "H.264"}
+STYLE_NAMES = {"labels": "SOS labels", "panels": "painted text"}
+
+
+def length_label(seconds: int) -> str:
+    """Return a movie length as presenters say it: "40 s", "2 min" or "1 min 30 s". Tested by test_package.py::test_length_label."""
+    minutes, rest = divmod(int(seconds), 60)
+    if not minutes:
+        return f"{rest} s"
+    return f"{minutes} min" + (f" {rest} s" if rest else "")
 
 
 def playlist_text(recipe: Recipe, data_name: str, credits: list[str], variant: str | None = None,
-                  labels: bool = False) -> str:
-    """Return playlist.sos with name (suffixed for codec variants), a single-line {{ }} description with credits, data, fps and labels for movies, and [playlist] extras. Tested by test_package.py::test_playlist_and_readme."""
+                  labels: bool = False, length: int | None = None, style: str | None = None) -> str:
+    """Return playlist.sos with name (qualified by length and codec variant), a single-line {{ }} description with credits, data, fps and labels for movies, and [playlist] extras. Tested by test_package.py::test_playlist_and_readme and test_build.py::test_length_variant_build."""
     desc = " ".join(recipe.dataset["description"].split())
     if credits:
         desc = f"{desc} Credits: {'; '.join(credits)}.".strip()
-    name = recipe.dataset["name"] + (f" ({CODEC_NAMES[variant]})" if variant else "")
+    qualifiers = (([length_label(length)] if length else []) + ([STYLE_NAMES[style]] if style else [])
+                  + ([CODEC_NAMES[variant]] if variant else []))
+    name = recipe.dataset["name"] + (f" ({', '.join(qualifiers)})" if qualifiers else "")
     lines = [f"name = {name}", f"description = {{{{ {desc} }}}}", f"data = {data_name}"]
     if recipe.is_movie and "fps" not in recipe.playlist:
         lines.append(f"fps = {recipe.animation['fps']}")
@@ -30,6 +41,21 @@ def playlist_text(recipe: Recipe, data_name: str, credits: list[str], variant: s
     return "\n".join(lines) + "\n"
 
 
+def version_note(summary: dict, length: int | None, style: str | None = None) -> str:
+    """Return the README sentences naming a length or text-style variant, or nothing for the recipe's own version. Tested by test_build.py::test_length_variant_build."""
+    s = summary.get("settings", {})
+    note = ""
+    if length:
+        note += (f" This is the **{length_label(length)}** version ({s.get('frames', 0):,} frames at {s.get('fps', 0)} "
+                 f"fps); other lengths of the same dataset install beside it as separate folders.")
+    if style == "labels":
+        note += (" Its text is not painted into the picture: SOS draws it from `labels.txt`, switched on in the "
+                 "playlist, so it can stay in place while the globe turns. A colour legend, if any, is still painted.")
+    elif style == "panels":
+        note += " Its text is painted into the picture, so it turns with the globe."
+    return note
+
+
 def _table(checks: list[dict]) -> str:
     """Format check results as a Markdown table. Tested by test_package.py::test_playlist_and_readme."""
     rows = ["| Check | Result | Measurement |", "|---|---|---|"]
@@ -37,7 +63,8 @@ def _table(checks: list[dict]) -> str:
 
 
 def readme_text(recipe: Recipe, data_name: str, sha: str, summary: dict, credits: list[str], licenses: list[str],
-                folder: str, variant: str | None = None, primary: tuple[str, str] | None = None) -> str:
+                folder: str, variant: str | None = None, primary: tuple[str, str] | None = None,
+                length: int | None = None, style: str | None = None) -> str:
     """Return the deployment README with contents, encoding notes, install steps, credits, licences, settings and checks. Tested by test_package.py::test_playlist_and_readme."""
     target = f"{SOS_SITE_CUSTOM}/{folder}"
     codec = (summary.get("video") or {}).get("codec")
@@ -59,7 +86,7 @@ def readme_text(recipe: Recipe, data_name: str, sha: str, summary: dict, credits
 
 {recipe.dataset['description']}
 
-Science On a Sphere {kind}, {summary['width']}x{summary['height']} equirectangular.
+Science On a Sphere {kind}, {summary['width']}x{summary['height']} equirectangular.{version_note(summary, length, style)}
 Built with sos-forge ({REPO_URL}) from recipe `{recipe.slug}`.
 
 {enc}
@@ -105,7 +132,7 @@ under Site-Custom. `playlist.sos` refers to `{data_name}` relative to its own fo
 
 def build_package(recipe: Recipe, data_file: Path, dist_dir: Path, summary: dict, credits: list[str],
                   licenses: list[str], variant: str | None = None, primary: tuple[str, str] | None = None,
-                  labels: Path | None = None) -> dict:
+                  labels: Path | None = None, length: int | None = None, style: str | None = None) -> dict:
     """Copy the data file (and labels.txt for movies) into the dist folder and write playlist.sos and README.md beside it, marking codec variants. Tested by test_build.py::test_texture_build_end_to_end and test_movie_build_end_to_end."""
     dist_dir.mkdir(parents=True, exist_ok=True)
     target = dist_dir / data_file.name
@@ -115,7 +142,9 @@ def build_package(recipe: Recipe, data_file: Path, dist_dir: Path, summary: dict
     playlist = dist_dir / "playlist.sos"
     if labels is not None and Path(labels).exists():
         shutil.copy2(labels, dist_dir / "labels.txt")
-    playlist.write_text(playlist_text(recipe, target.name, credits, variant, labels=labels is not None))
+    playlist.write_text(playlist_text(recipe, target.name, credits, variant, labels=labels is not None, length=length,
+                                      style=style))
     readme = dist_dir / "README.md"
-    readme.write_text(readme_text(recipe, target.name, sha, summary, credits, licenses, dist_dir.name, variant, primary))
+    readme.write_text(readme_text(recipe, target.name, sha, summary, credits, licenses, dist_dir.name, variant, primary,
+                                  length, style))
     return {"data": target, "playlist": playlist, "readme": readme, "sha256": sha}

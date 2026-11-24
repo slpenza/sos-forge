@@ -60,6 +60,23 @@ sos build coffee_shops
 This writes `dist/coffee_shops/`, the folder you copy to the sphere. See
 [Put a dataset on your sphere](deploying.md).
 
+## Make a movie longer or shorter
+
+A movie's length is set in its recipe. To build another length without editing the recipe, give it in whole
+seconds:
+
+```bash
+sos build getting_richer --seconds 120
+```
+
+This renders a fresh frame for every moment, so a slower version is just as smooth, not stretched. It is written
+to `dist/getting_richer_120s/` and named "Getting Richer (2 min)" in the playlist. That way it can sit on the
+sphere next to the standard length, and presenters can pick whichever fits their show.
+
+To leave the text out of the picture and let SOS draw it from `labels.txt` instead, so it can stay put while the
+globe turns, add `--hud labels`. That version is written to `dist/getting_richer_labels/` (or
+`dist/getting_richer_120s_labels/` with `--seconds 120`).
+
 ## What a build checks
 
 Every build checks its own work before it writes anything:
