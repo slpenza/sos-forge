@@ -12,7 +12,7 @@
 [site]
 domain = "sos.stevenpenza.com"
 repo = "slpenza/sos-forge"
-ask_base = "https://yik2mveql9.execute-api.us-east-1.amazonaws.com"   # Ask & Answer's API: the help, the ask box and the CSP use it
+ask_base = "https://ask.stevenpenza.com"   # Ask & Answer's API: the help, the ask box and the CSP use it
 ask_projects = ["sos"]
 preview_width = 2048             # browser previews are H.264 at this width (or smaller sources as they are)
 
