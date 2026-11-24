@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import io
 import json
+import functools
+import http.server
 import subprocess
+import threading
 import zipfile
 from pathlib import Path
 
@@ -112,7 +115,7 @@ def test_lengths_and_download_checks(tmp_path, monkeypatch):
 def test_config_validation(tmp_path):
     """Checks site.toml defaults, and that duplicate slugs, unknown keys and entries without a source are refused. Covers load_config; this test is not itself tested."""
     ok = tmp_path / "ok.toml"
-    ok.write_text('[site]\ndomain="d"\nask_release="v1"\n[[datasets]]\nslug="a"\nrelease="v0.1.0"\npreview="a.zip"\n')
+    ok.write_text('[site]\ndomain="d"\n[[datasets]]\nslug="a"\nrelease="v0.1.0"\npreview="a.zip"\n')
     cfg = site.load_config(ok)
     assert cfg["preview_width"] == 2048 and cfg["ask_projects"] == ["sos"] and cfg["datasets"][0]["downloads"] == []
     for body, msg in (('[[datasets]]\nslug="a"\ndist="x"\n[[datasets]]\nslug="a"\ndist="y"\n', "unique slug"),
@@ -188,80 +191,112 @@ def test_release_assets_are_fetched_and_cached(monkeypatch):
         site.release_asset("o/r", "v0.1.0", "other.zip")
 
 
-def git(repo, *args):
-    """Run a git command in a test repo with a fixed identity. Helper; not itself tested."""
-    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
-                   check=True, capture_output=True)
+STAND_IN_CORPUS = """import json, pathlib, sys, urllib.request
+args = sys.argv
+opt = lambda name: args[args.index(name) + 1] if name in args else None
+project = pathlib.Path(opt('--project'))
+if '--fetch' in args:
+    lock = json.loads((project / 'ask.lock.json').read_text())
+    into = pathlib.Path(opt('--into'))
+    for f in lock['files']:
+        if f != 'corpus.py':
+            (into / f).parent.mkdir(parents=True, exist_ok=True)
+            (into / f).write_bytes(urllib.request.urlopen(opt('--fetch') + '/artifacts/' + lock['release'] + '/' + f).read())
+    sys.exit(0)
+block = json.loads((project / 'package.json').read_text())['askAnswer']
+out = pathlib.Path(opt('--docs-out'))
+out.mkdir(parents=True, exist_ok=True)
+(out / 'index.html').write_text(json.dumps({'key': args[args.index(str(project)) + 1], 'block': block, 'ask_base': opt('--ask-base'),
+    'files': sorted(str(p.relative_to(project)) for p in project.rglob('*') if p.is_file())}))
+"""
 
 
-def stand_in_ask_answer(root):
-    """Make a git repo standing in for ask-answer: v0.18.1 has the panel files and a corpus.py that refuses a frame, v0.19.1 a corpus.py that records the askAnswer block it reads, and the working tree is left on an untagged later commit. Helper; not itself tested."""
-    (root / "client").mkdir(parents=True)
-    (root / "tools").mkdir()
-    for f in site.PANEL_FILES:
-        (root / "client" / f).write_text(f"/* {f} v0.18.1 */")
-    head = "import json, pathlib, sys\nproject = pathlib.Path(sys.argv[sys.argv.index('--project') + 1])\n" \
-           "block = json.loads((project / 'package.json').read_text())['askAnswer']\n" \
-           "out = pathlib.Path(sys.argv[sys.argv.index('--docs-out') + 1])\nout.mkdir(parents=True, exist_ok=True)\n"
-    (root / "tools" / "corpus.py").write_text(head + "if 'bar' in block: sys.exit('askAnswer.bar is not a field')\n"
-                                              "(out / 'index.html').write_text('v0.18.1')\n")
-    git(root, "init", "-q")
-    git(root, "add", "-A")
-    git(root, "commit", "-qm", "v0.18.1")
-    git(root, "tag", "v0.18.1")
-    (root / "tools" / "corpus.py").write_text(
-        head + "(out / 'index.html').write_text(json.dumps({'key': sys.argv[3], 'block': block, "
-        "'files': sorted(str(p.relative_to(project)) for p in project.rglob('*') if p.is_file())}))\n")
-    for f in site.PANEL_FILES:
-        (root / "client" / f).write_text(f"/* {f} v0.19.1 */")
-    git(root, "commit", "-qam", "v0.19.1")
-    git(root, "tag", "v0.19.1")
-    (root / "client" / site.PANEL_FILES[0]).write_text("/* work in progress */")
-    git(root, "commit", "-qam", "later")
+def stand_in_api(root):
+    """Serve a stand-in Ask & Answer API from root: release v9.9.9's artifacts (a corpus.py that fetches the lock's files and records what it builds help from, the panel files and a docsite page), and write the matching ask.lock.json in root/project. Return (base URL, lock path, server). Helper; not itself tested."""
+    files = {"corpus.py": STAND_IN_CORPUS, "docsite/index.html": "<!doctype html>",
+             **{f: f"/* {f} v9.9.9 */" for f in site.PANEL_FILES}}
+    for name, text in files.items():
+        (root / "artifacts" / "v9.9.9" / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / "artifacts" / "v9.9.9" / name).write_text(text)
+    (root / "project").mkdir()
+    lock = root / "project" / "ask.lock.json"
+    lock.write_text(json.dumps({"release": "v9.9.9", "files": {n: site.sha384(t.encode()) for n, t in files.items()}}))
+    handler = functools.partial(QuietHandler, directory=str(root))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_port}", lock, server
+
+
+class QuietHandler(http.server.SimpleHTTPRequestHandler):
+    """Serve files without logging each request. Test helper; not itself tested."""
+
+    def log_message(self, *args):
+        """Keep test output quiet. Test helper; not itself tested."""
+
+
+def test_fetch_ask_checks_the_lock(tmp_path):
+    """Checks the pinned release is fetched when corpus.py matches ask.lock.json, and refused when the served corpus.py was changed, the lock is missing, or it doesn't pin the panel. Covers ask_lock, sha384 and fetch_ask against a stand-in API; the real API is exercised by sos site."""
+    base, lock, server = stand_in_api(tmp_path / "api")
+    try:
+        got = site.fetch_ask(base + "/", tmp_path / "fetched", lock)
+        assert sorted(str(p.relative_to(got)) for p in got.rglob("*") if p.is_file()) == sorted(
+            ["corpus.py", "docsite/index.html", *site.PANEL_FILES])
+        assert (got / "ask-panel.js").read_text() == "/* ask-panel.js v9.9.9 */"
+        served = tmp_path / "api" / "artifacts" / "v9.9.9" / "corpus.py"
+        served.write_text(served.read_text() + "# changed\n")
+        with pytest.raises(RecipeError, match="not the one ask.lock.json pins"):
+            site.fetch_ask(base, tmp_path / "again", lock)
+        with pytest.raises(RecipeError, match="not found"):
+            site.ask_lock(tmp_path / "nowhere.json")
+        lock.write_text(json.dumps({"release": "v9.9.9", "files": {"corpus.py": "sha384-x"}}))
+        with pytest.raises(RecipeError, match="ask-client.js"):
+            site.ask_lock(lock)
+    finally:
+        server.shutdown()
 
 
 def test_build_site_end_to_end(tmp_path):
-    """Checks the site assembles static pages without test or fragment files, one dataset with its preview, the help from the [help] release's corpus.py with the frame added only in its copy of the project, the panel files from ask_release whatever the checkout has out, both from one tag when the pins match, config.json, no Ask page, Help links pointing at the docs on GitHub in a build without an ask-answer checkout, and that a missing tag fails a strict build. Covers build_site, build_help, release_tree and ask_release_files with a stand-in ask-answer repo; this test is not itself tested."""
+    """Checks the site assembles static pages without test or fragment files, one dataset with its preview, the help from the pinned release's corpus.py with the [help] frame (layout and ask included) added only in its copy of the project and site.toml's Ask base passed, the panel files from that release, config.json, no Ask page, and Help links pointing at the docs on GitHub in a build with an empty Ask base. Covers build_site, fetch_ask, build_help and point_help_at_docs with a stand-in API; this test is not itself tested."""
     dist = tmp_path / "dist"
     make_dataset(dist / "tiny_h264", name="Tiny (H.264)")
-    ask = tmp_path / "ask-answer"
-    stand_in_ask_answer(ask)
+    base, lock, server = stand_in_api(tmp_path / "api")
     cfg = tmp_path / "site.toml"
-    cfg.write_text('[site]\ndomain="d"\nask_release="v0.18.1"\n[help]\nrelease="v0.19.1"\nbar="./site/help-bar.html"\n'
+    cfg.write_text('[site]\ndomain="d"\nask_base="' + base + '/"\n[help]\nbar="./site/help-bar.html"\nlayout="desk"\nask={heading="Ask us",suggestions=3}\n'
                    'title={site="S",section="Help"}\n[[help.groups]]\nname="All"\ntopics=["docs/getting-started.md"]\n'
                    '[[datasets]]\nslug="tiny"\nrelease="v0.1.0"\npreview="tiny_h264.zip"\ndownloads=["tiny.zip"]\ndates="Spring 2026"\n')
     out = tmp_path / "out"
-    manifest = site.build_site(cfg, out, dist=dist, ask_checkout=ask, ask_base="https://ask.example/prod/", strict_ask=True)
+    try:
+        manifest = site.build_site(cfg, out, dist=dist, ask_lock_path=lock)
+    finally:
+        server.shutdown()
     d = manifest["datasets"][0]
     assert d["dates"] == "Spring 2026" and d["sources"] == [] and d["lengths"][0]["default"]
     assert d["slug"] == "tiny" and d["downloads"][0]["url"] == "https://github.com/slpenza/sos-forge/releases/download/v0.1.0/tiny.zip"
     assert json.loads((out / "datasets.json").read_text()) == manifest
-    assert json.loads((out / "config.json").read_text()) == {"askProjects": ["sos"], "askBase": "https://ask.example/prod"}
+    assert json.loads((out / "config.json").read_text()) == {"askProjects": ["sos"], "askBase": base}
     seen = json.loads((out / "help" / "index.html").read_text())
-    assert seen["key"] == "sos" and seen["block"]["bar"] == "./site/help-bar.html" and seen["block"]["groups"][0]["name"] == "All"
+    assert seen["key"] == "sos" and seen["ask_base"] == base and seen["block"]["layout"] == "desk"
+    assert seen["block"]["ask"] == {"heading": "Ask us", "suggestions": 3} and seen["block"]["bar"] == "./site/help-bar.html"
+    assert seen["block"]["groups"][0]["name"] == "All"
     assert {"package.json", "site/help-head.html", "site/help-bar.html", "docs/getting-started.md"} <= set(seen["files"])
-    assert "bar" not in json.loads((site.REPO_ROOT / "package.json").read_text())["askAnswer"]
-    assert all((out / "ask" / f).read_text() == f"/* {f} v0.18.1 */" for f in site.PANEL_FILES)
-    for page in ("index.html", "simulator.html", "404.html", "js/globe.js", "css/site.css"):
+    assert not {"layout", "ask", "bar"} & set(json.loads((site.REPO_ROOT / "package.json").read_text())["askAnswer"])
+    assert all((out / "ask" / f).read_text() == f"/* {f} v9.9.9 */" for f in site.PANEL_FILES)
+    for page in ("index.html", "simulator.html", "404.html", "js/globe.js", "js/ask.js", "css/site.css"):
         assert (out / page).exists(), page
     assert not list(out.rglob("*.test.mjs")) and not (out / "help-head.html").exists() and not (out / "site.toml").exists()
     assert not (out / "ask.html").exists() and not any('ask.html' in f.read_text() for f in out.glob("*.html"))
-    bare = site.build_site(cfg, tmp_path / "bare", dist=dist)
+    bare = site.build_site(cfg, tmp_path / "bare", dist=dist, ask_base="")
     assert bare["datasets"] and json.loads((tmp_path / "bare" / "config.json").read_text()) == {"askProjects": ["sos"]}
+    assert not (tmp_path / "bare" / "help").exists() and not (tmp_path / "bare" / "ask").exists()
     docs = 'href="https://github.com/slpenza/sos-forge/blob/main/docs/getting-started.md"'
     for page, links in (("index.html", 2), ("simulator.html", 1), ("404.html", 1)):
         text = (tmp_path / "bare" / page).read_text()
         assert text.count(docs) == links and 'help/"' not in text, page
     assert 'href="help/"' in (out / "index.html").read_text() and docs not in (out / "index.html").read_text()
-    same = tmp_path / "same.toml"
-    same.write_text(cfg.read_text().replace('[help]\nrelease="v0.19.1"', '[help]').replace('ask_release="v0.18.1"', 'ask_release="v0.19.1"'))
-    assert site.load_config(same)["help_release"] == "v0.19.1"
-    site.build_site(same, tmp_path / "same", dist=dist, ask_checkout=ask, strict_ask=True)
-    assert all((tmp_path / "same" / "ask" / f).read_text() == f"/* {f} v0.19.1 */" for f in site.PANEL_FILES)
-    assert json.loads((tmp_path / "same" / "help" / "index.html").read_text())["block"]["bar"] == "./site/help-bar.html"
-    cfg.write_text(cfg.read_text().replace('release="v0.19.1"', 'release="v0.20.0"'))
-    with pytest.raises(RecipeError, match="no v0.20.0"):
-        site.build_site(cfg, tmp_path / "strict", dist=dist, ask_checkout=ask, strict_ask=True)
+    for old, msg in (('[site]\ndomain="d"\nask_release="v1"\n', "ask_release"), ('[site]\ndomain="d"\n[help]\nrelease="v1"\n', "release")):
+        (tmp_path / "old.toml").write_text(old)
+        with pytest.raises(RecipeError, match=msg):
+            site.load_config(tmp_path / "old.toml")
     cfg.write_text(cfg.read_text().replace('topics=["docs/getting-started.md"]', 'topics=["docs/nope.md"]'))
     with pytest.raises(RecipeError, match="nope.md"):
         site.load_config(cfg)

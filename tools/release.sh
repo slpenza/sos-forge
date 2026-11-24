@@ -5,8 +5,8 @@
 # wheel, and publishes a GitHub Release whose notes are the scope doc.
 #
 # Needs: python3 with the dev extras and `build` installed, gh signed in (GH_TOKEN in CI), node 24, AWS access to
-# sosforge-deploy-role, $SOSFORGE_ASK_BASE, and an ask-answer clone holding site/site.toml's ask_release and
-# [help] release tags (the build reads both with git archive, whatever the clone has checked out).
+# sosforge-deploy-role, and Ask & Answer's API (site/site.toml's ask_base), from which the build fetches the release
+# ask.lock.json pins, checked file by file (design/v0/v0.4.2.md).
 # Datasets (MP4/JPG) are not built here: bundle them and attach them to a data-YYYY-MM release before pushing the
 # version tag whose site/site.toml lists them (design/v0/v0.3.0.md).
 set -euo pipefail
@@ -31,10 +31,12 @@ else
   gh release create "$tag" dist-pkg/* --verify-tag --title "$tag" --notes-file "design/v$major/$tag.md"
 fi
 
-# The site, sos.stevenpenza.com (design/v0/v0.2.0.md): built from the datasets attached to releases and the
-# pinned ask-answer releases, then deployed by CDK through sosforge-deploy-role (OIDC in CI, a profile by hand).
+# The site, sos.stevenpenza.com (design/v0/v0.2.0.md): built from the datasets attached to releases and the pinned
+# Ask & Answer release, then deployed by CDK through sosforge-deploy-role (OIDC in CI, a profile by hand). The stack's
+# CSP allows the same API the build used: site.toml's ask_base unless $SOSFORGE_ASK_BASE overrides it.
 if [ -d infra ]; then
-  python3 -m sosforge site --strict-ask --ask-answer "${SOSFORGE_ASK_ANSWER:-../ask-answer}" --out build/site
+  export SOSFORGE_ASK_BASE="${SOSFORGE_ASK_BASE:-$(python3 -c 'import tomllib; print(tomllib.load(open("site/site.toml", "rb"))["site"]["ask_base"])')}"
+  python3 -m sosforge site --out build/site
   [ -n "${CI:-}" ] || export AWS_PROFILE="${AWS_PROFILE:-sosforge-deploy-role}"
   (cd infra && npm ci && SOSFORGE_SITE_DIR="$PWD/../build/site" npx cdk deploy SosForgeSite --require-approval never)
 fi

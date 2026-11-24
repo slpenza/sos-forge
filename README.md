@@ -37,8 +37,10 @@ README has the exact commands and checksums).
 - a **simulator** that plays a dataset on a virtual 6-foot sphere in the browser, following its `playlist.sos`
   (frame rate, holds, spin, tilt). It has Orbit and Visitor views and a fixed caption, and you can drop in a
   dataset folder of your own; nothing is uploaded.
-- the help, built by Ask & Answer. A build without an Ask & Answer checkout (a fork, say) still has the gallery
-  and simulator, and its Help links open the docs on GitHub instead
+- the help, built by Ask & Answer, with its question box first, and an ask box on the home page that takes a
+  question there. The release is pinned in `ask.lock.json` and fetched from `site/site.toml`'s `ask_base`, each
+  file checked against the lock. `sos site --no-ask` builds without it (a fork, say): the gallery and simulator stay,
+  and Help links open the docs on GitHub
 
 `infra/` deploys it, but only from a pushed version tag (see design/v0/v0.2.0.md).
 
@@ -142,5 +144,8 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
   `data-*` tag deploys nothing. Extra lengths are built with `sos build <slug> --seconds N`, bundled by the same
   `sos bundle`, and listed as `lengths = [N, ...]`. `sos site` refuses to deploy a download, or a length, that its
   release doesn't hold.
+- **Moving to another Ask & Answer release** is deliberate, never part of a build: take `corpus.py` from the API's
+  `artifacts.base`, check it against the integrity `GET /ask` lists, run
+  `python3 corpus.py --project . --lock <ask_base>`, and commit the new `ask.lock.json` with the version that moves.
 
 MIT licence. Built for NOAA SOS sites, museums and science centres.

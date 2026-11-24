@@ -129,22 +129,12 @@ def cmd_bundle(args) -> int:
     return 0
 
 
-def ask_checkout_path(arg: str | None) -> Path | None:
-    """Resolve the ask-answer checkout from the flag, $SOSFORGE_ASK_ANSWER, or a sibling ../ask-answer folder. Tested by test_cli.py::test_site_and_bundle_commands."""
-    from .site import REPO_ROOT
-    for cand in (arg, os.environ.get("SOSFORGE_ASK_ANSWER"), REPO_ROOT.parent / "ask-answer"):
-        if cand and (Path(cand) / "tools" / "corpus.py").exists():
-            return Path(cand)
-    return None
-
-
 def cmd_site(args) -> int:
     """Build the sos.stevenpenza.com site into a folder, optionally serving it locally for a look. Tested by test_site.py::test_build_site_end_to_end through build_site(); serving is exercised manually."""
     from .site import build_site
     out = Path(args.out)
     manifest = build_site(Path(args.config), out, dist=Path(args.dist) if args.dist else None,
-                          ask_checkout=ask_checkout_path(args.ask_answer),
-                          ask_base=args.ask_base or os.environ.get("SOSFORGE_ASK_BASE"), strict_ask=args.strict_ask,
+                          ask_base="" if args.no_ask else (args.ask_base or os.environ.get("SOSFORGE_ASK_BASE")),
                           check_downloads=not args.no_check_downloads)
     print(f"{out}  ({len(manifest['datasets'])} datasets)")
     if args.serve:
@@ -201,9 +191,10 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "site" / "site.toml"))
     p.add_argument("--out", default="build/site")
     p.add_argument("--dist", help="use built dataset folders from here instead of release downloads")
-    p.add_argument("--ask-answer", help="ask-answer checkout (default $SOSFORGE_ASK_ANSWER or ../ask-answer)")
-    p.add_argument("--ask-base", help="Ask API base URL (default $SOSFORGE_ASK_BASE)")
-    p.add_argument("--strict-ask", action="store_true", help="fail unless the checkout has site.toml's ask_release and [help] release tags")
+    p.add_argument("--ask-base", help="Ask & Answer API base (default $SOSFORGE_ASK_BASE, then site.toml's ask_base); the "
+                                      "help pages and the ask box are built from the release ask.lock.json pins, fetched from it")
+    p.add_argument("--no-ask", action="store_true", help="build without Ask & Answer: no help pages or ask box, and Help "
+                                                         "links point at the docs on GitHub")
     p.add_argument("--no-check-downloads", action="store_true",
                    help="skip checking that every download (and length) in site.toml is on its release")
     p.add_argument("--serve", type=int, nargs="?", const=8040, help="serve the result locally on this port")

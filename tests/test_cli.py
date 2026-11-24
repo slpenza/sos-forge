@@ -58,17 +58,17 @@ def test_codec_flag_parses_to_list():
 
 
 def test_site_and_bundle_commands(tmp_path, monkeypatch, capsys):
-    """Checks the ask-answer checkout resolves from the flag, then the environment, and a bundle runs from the CLI. Covers ask_checkout_path and cmd_bundle; cmd_site's serving is exercised manually."""
-    import os
+    """Checks sos site passes the Ask & Answer base from the flag or $SOSFORGE_ASK_BASE (leaving site.toml's to build_site), an empty one for --no-ask, and checks downloads unless told not to, and a bundle runs from the CLI. Covers cmd_site's wiring and cmd_bundle; build_site itself is tested in test_site.py and serving is exercised manually."""
     from test_site import make_dataset
-    flag, env = tmp_path / "flag", tmp_path / "env"
-    for d in (flag, env):
-        (d / "tools").mkdir(parents=True)
-        (d / "tools" / "corpus.py").write_text("")
-    monkeypatch.setenv("SOSFORGE_ASK_ANSWER", str(env))
-    assert cli.ask_checkout_path(str(flag)) == flag
-    assert cli.ask_checkout_path(None) == env
-    assert cli.ask_checkout_path(str(tmp_path / "missing")) == env
+    from sosforge import site
+    seen = []
+    monkeypatch.setattr(site, "build_site", lambda cfg, out, **kw: (seen.append(kw), {"datasets": []})[1])
+    monkeypatch.setenv("SOSFORGE_ASK_BASE", "https://env.example")
+    assert cli.main(["site", "--out", str(tmp_path / "s")]) == 0
+    assert cli.main(["site", "--out", str(tmp_path / "s"), "--ask-base", "https://flag.example", "--no-check-downloads"]) == 0
+    assert cli.main(["site", "--out", str(tmp_path / "s"), "--no-ask"]) == 0
+    assert [(k["ask_base"], k["check_downloads"]) for k in seen] == [
+        ("https://env.example", True), ("https://flag.example", False), ("", True)]
     make_dataset(tmp_path / "dist" / "tiny")
     assert cli.main(["bundle", "tiny", "--dist", str(tmp_path / "dist")]) == 0
     assert capsys.readouterr().out.strip().endswith("tiny_256x128.zip")

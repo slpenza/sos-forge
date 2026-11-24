@@ -12,18 +12,20 @@
 [site]
 domain = "sos.stevenpenza.com"
 repo = "slpenza/sos-forge"
-ask_release = "v0.19.3"          # ask-answer tag whose client/ and tools/ the build copies; keep equal to ask-answer-deploy's "release"
+ask_base = "https://yik2mveql9.execute-api.us-east-1.amazonaws.com"   # Ask & Answer's API: the help, the ask box and the CSP use it
 ask_projects = ["sos"]
 preview_width = 2048             # browser previews are H.264 at this width (or smaller sources as they are)
 
 
-# The help pages' frame. package.json's askAnswer block carries only what the corpus needs; the title, bar and groups
-# are added to a temporary copy of the project that ask_release's corpus.py builds the pages from, so the frame never
-# depends on what the deployed Ask & Answer accepts (design/v0/v0.3.0.md). Add release = "<tag>" only if the pages
-# must be built by a different ask-answer tag than the panel.
+# The help pages' frame. package.json's askAnswer block carries only what the corpus needs; the title, bar, groups,
+# layout and the panel's words are added to a temporary copy of the project that the pinned corpus.py builds the pages
+# from (design/v0/v0.3.0.md). The Ask & Answer release is pinned in ask.lock.json at the repo root, and fetched from
+# $SOSFORGE_ASK_BASE at build time (design/v0/v0.4.2.md).
 [help]
 bar = "./site/help-bar.html"
 title = { site = "SOS Forge", section = "Help" }
+layout = "desk"                  # the question box first, recent and common questions, then the topics, one column
+ask = { heading = "Ask about sos-forge", lede = "Answers come from these pages and quote the lines they rely on.", suggestions = 5 }
 
 [[help.groups]]
 name = "Getting started"

@@ -6,7 +6,8 @@ Ask & Answer's corpus.py, and copies Ask & Answer's panel files in. See design/v
 """
 from __future__ import annotations
 
-import io
+import base64
+import hashlib
 import json
 import logging
 import os
@@ -14,7 +15,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 import tomllib
 import zipfile
@@ -27,11 +27,12 @@ from .timeline import parse_date
 
 LOG = logging.getLogger("sosforge.site")
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SITE_KEYS = {"domain", "repo", "ask_release", "ask_projects", "preview_width"}
+SITE_KEYS = {"domain", "repo", "ask_base", "ask_projects", "preview_width"}
 DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist", "dates", "lengths", "per", "label_style", "sources"}
 STATIC_SKIP = (".test.mjs", "help-head.html", "help-bar.html", "site.toml")
 PANEL_FILES = ("ask-client.js", "ask-panel.js", "ask-panel.css")
-HELP_KEYS = {"release", "bar", "title", "groups", "landing"}
+ASK_LOCK = Path(__file__).resolve().parents[1] / "ask.lock.json"   # the pinned Ask & Answer release (design/v0/v0.4.2.md)
+HELP_KEYS = {"bar", "title", "groups", "landing", "layout", "ask"}
 
 
 def parse_playlist(text: str) -> dict:
@@ -79,12 +80,11 @@ def load_config(path: Path) -> dict:
     site = raw.get("site", {})
     check_keys("site", site, SITE_KEYS)
     cfg = {"domain": site.get("domain", ""), "repo": site.get("repo", "slpenza/sos-forge"),
-           "ask_release": site.get("ask_release"), "ask_projects": site.get("ask_projects", ["sos"]),
+           "ask_base": site.get("ask_base"), "ask_projects": site.get("ask_projects", ["sos"]),
            "preview_width": int(site.get("preview_width", 2048)), "datasets": []}
     help_cfg = raw.get("help", {})
     check_keys("help", help_cfg, HELP_KEYS)
-    cfg["help_release"] = help_cfg.get("release") or cfg["ask_release"]
-    cfg["help_frame"] = {k: help_cfg[k] for k in HELP_KEYS - {"release"} if k in help_cfg}
+    cfg["help_frame"] = {k: help_cfg[k] for k in HELP_KEYS if k in help_cfg}
     missing = [t for g in cfg["help_frame"].get("groups", []) for t in g.get("topics", []) if not (REPO_ROOT / t).is_file()]
     if missing:
         raise RecipeError(f"[help] groups name topics that do not exist: {', '.join(missing)}")
@@ -338,25 +338,46 @@ def dataset_entry(folder: Path, slug: str, out: Path, width: int, ffmpeg: str, d
             "licences": lists["licences"], "downloads": downloads, "labels": labels, "dates": dates}
 
 
-def release_tree(ask_checkout: Path, tag: str, paths: list[str], into: Path) -> Path:
-    """Extract paths of an ask-answer release from the checkout's git history with git archive, leaving the checkout untouched, and return the folder. Tested by test_site.py::test_build_site_end_to_end against a git repo with two tags, including a missing tag."""
-    res = subprocess.run(["git", "-C", str(ask_checkout), "archive", "--format=tar", tag, *paths], capture_output=True)
-    if res.returncode != 0:
-        raise RecipeError(f"ask-answer checkout {ask_checkout} has no {tag} with {', '.join(paths)} "
-                          f"(git -C {ask_checkout} fetch --tags): {res.stderr.decode(errors='replace').strip()}")
+def ask_lock(path: Path | None = None) -> dict:
+    """Read ask.lock.json, the pinned Ask & Answer release and the sha384 of each of its files, refusing one without corpus.py or the panel. Tested by test_site.py::test_fetch_ask_checks_the_lock."""
+    path = path or ASK_LOCK
+    if not path.is_file():
+        raise RecipeError(f"{path} not found: pin a release with corpus.py --project . --lock <ask base>")
+    lock = json.loads(path.read_text())
+    files = lock.get("files", {}) if isinstance(lock, dict) else {}
+    missing = [f for f in ("corpus.py", *PANEL_FILES) if f not in files]
+    if not lock.get("release") or missing:
+        raise RecipeError(f"{path} must name a release and pin {', '.join(missing) or 'its files'}")
+    return lock
+
+
+def sha384(data: bytes) -> str:
+    """Return the Subresource Integrity form of a SHA-384 digest, as ask.lock.json records it. Tested by test_site.py::test_fetch_ask_checks_the_lock."""
+    return "sha384-" + base64.b64encode(hashlib.sha384(data).digest()).decode()
+
+
+def fetch_ask(ask_base: str, into: Path, lock_path: Path | None = None) -> Path:
+    """Fetch the pinned Ask & Answer release into a folder: corpus.py checked here against ask.lock.json, then corpus.py --fetch, which checks itself and writes every other pinned file (the panel, docsite/) or none. Tested by test_site.py::test_fetch_ask_checks_the_lock against a stand-in API; the real one is exercised by sos site."""
+    lock_path = lock_path or ASK_LOCK
+    lock = ask_lock(lock_path)
+    base = ask_base.rstrip("/")
+    body = http_request(f"{base}/artifacts/{lock['release']}/corpus.py", retries=3)
+    if sha384(body) != lock["files"]["corpus.py"]:
+        raise RecipeError(f"corpus.py from {base} is not the one {lock_path.name} pins for {lock['release']}")
     if into.exists():
         shutil.rmtree(into)
     into.mkdir(parents=True)
-    with tarfile.open(fileobj=io.BytesIO(res.stdout)) as tar:
-        tar.extractall(into, filter="data")
+    (into / "corpus.py").write_bytes(body)
+    res = subprocess.run([sys.executable, "-I", str(into / "corpus.py"), "--project", str(lock_path.parent),
+                          "--fetch", base, "--into", str(into)], capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RecipeError(f"corpus.py could not fetch {lock['release']}:\n{res.stderr.strip() or res.stdout.strip()}")
+    LOG.info("Ask & Answer %s fetched and checked against %s", lock["release"], lock_path.name)
     return into
 
 
-def build_help(tools: Path, out: Path, frame: dict, key: str = "sos") -> None:
-    """Write the help pages with a release's corpus.py from a temporary copy of the project whose askAnswer block gains the [help] frame, so package.json keeps only what the deployed Ask & Answer accepts. Tested by test_site.py::test_build_site_end_to_end with a stand-in corpus.py that records the block it reads; the real tool is exercised by sos site."""
-    corpus = tools / "tools" / "corpus.py"
-    if not corpus.exists():
-        raise RecipeError(f"{corpus} not found: point --ask-answer (or $SOSFORGE_ASK_ANSWER) at an ask-answer checkout")
+def build_help(corpus: Path, out: Path, frame: dict, ask_base: str, key: str = "sos") -> None:
+    """Write the help pages, with Ask & Answer's panel on their landing, from a temporary copy of the project whose askAnswer block gains the [help] frame (bar, title, groups, layout, ask), so package.json keeps only what the corpus needs. Tested by test_site.py::test_build_site_end_to_end with a stand-in corpus.py that records what it was given; the real tool is exercised by sos site."""
     pkg = json.loads((REPO_ROOT / "package.json").read_text())
     block = {**pkg["askAnswer"], **frame}
     with tempfile.TemporaryDirectory() as tmp:
@@ -367,29 +388,19 @@ def build_help(tools: Path, out: Path, frame: dict, key: str = "sos") -> None:
             dst.parent.mkdir(parents=True, exist_ok=True)
             (shutil.copytree if src.is_dir() else shutil.copy2)(src, dst)
         (project / "package.json").write_text(json.dumps({**pkg, "askAnswer": block}, indent=1))
-        res = subprocess.run([sys.executable, str(corpus), "--project", str(project), key, "--docs-out", str(out / "help")],
+        res = subprocess.run([sys.executable, "-I", str(corpus), "--project", str(project), key,
+                              "--docs-out", str(out / "help"), "--ask-base", ask_base.rstrip("/")],
                              capture_output=True, text=True)
     if res.returncode != 0:
         raise RecipeError(f"corpus.py could not build the help:\n{res.stderr.strip() or res.stdout.strip()}")
     LOG.info("help pages written (%d files)", sum(1 for _ in (out / "help").rglob("*") if _.is_file()))
 
 
-def ask_release_files(ask_checkout: Path, tag: str, paths: list[str], into: Path, strict: bool) -> Path:
-    """Return a folder holding a pinned release's paths, or the checkout as it stands (with a warning) when the tag is missing and the build is not strict. Tested by test_site.py::test_build_site_end_to_end."""
-    try:
-        return release_tree(ask_checkout, tag, paths, into)
-    except RecipeError as exc:
-        if strict:
-            raise
-        LOG.warning("%s; using the checkout as it stands", exc)
-        return ask_checkout
-
-
 HELP_HREF = re.compile(r'href="/?help/"')
 
 
 def point_help_at_docs(out: Path, repo: str) -> int:
-    """Rewrite the site's links to /help/ to the docs on GitHub when the build has no help pages, returning how many links changed. Tested by test_site.py::test_build_site_end_to_end's build without an ask-answer checkout."""
+    """Rewrite the site's links to /help/ to the docs on GitHub when the build has no help pages (no Ask & Answer base), returning how many links changed. Tested by test_site.py::test_build_site_end_to_end's build without an Ask & Answer base."""
     url = f"https://github.com/{repo}/blob/main/docs/getting-started.md"
     changed = 0
     for page in out.glob("*.html"):
@@ -400,10 +411,11 @@ def point_help_at_docs(out: Path, repo: str) -> int:
     return changed
 
 
-def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_checkout: Path | None = None,
-               ask_base: str | None = None, strict_ask: bool = False, check_downloads: bool = False) -> dict:
-    """Assemble the whole site into `out` and return the manifest written as datasets.json. Tested by test_site.py::test_build_site_end_to_end."""
+def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_base: str | None = None,
+               check_downloads: bool = False, ask_lock_path: Path | None = None) -> dict:
+    """Assemble the whole site into `out` and return the manifest written as datasets.json; ask_base defaults to site.toml's, and an empty one builds without Ask & Answer. Tested by test_site.py::test_build_site_end_to_end."""
     cfg = load_config(config_path)
+    ask_base = cfg["ask_base"] if ask_base is None else ask_base
     if check_downloads:
         missing = missing_downloads(cfg["repo"], cfg["datasets"])
         if missing:
@@ -437,20 +449,17 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ch
     manifest = {"datasets": entries}
     (out / "datasets.json").write_text(json.dumps(manifest, indent=1))
     ask_cfg: dict = {"askProjects": cfg["ask_projects"]}
-    if ask_checkout:
-        panel = ask_release_files(ask_checkout, cfg["ask_release"], ["client"],
-                                  work / "ask" / "client" / cfg["ask_release"], strict_ask)
-        tools = ask_release_files(ask_checkout, cfg["help_release"], ["tools"],
-                                  work / "ask" / "tools" / cfg["help_release"], strict_ask)
-        build_help(tools, out, cfg["help_frame"])
+    if ask_base:
+        files = fetch_ask(ask_base, work / "ask", ask_lock_path)
+        build_help(files / "corpus.py", out, cfg["help_frame"], ask_base)
         (out / "ask").mkdir(exist_ok=True)
         for f in PANEL_FILES:
-            shutil.copy2(panel / "client" / f, out / "ask" / f)
-        if ask_base:
-            ask_cfg["askBase"] = ask_base.rstrip("/")
+            shutil.copy2(files / f, out / "ask" / f)
+        ask_cfg["askBase"] = ask_base.rstrip("/")
     else:
         n = point_help_at_docs(out, cfg["repo"])
-        LOG.warning("no ask-answer checkout: building without the help pages; %d Help links point at the docs on GitHub", n)
+        LOG.warning("no Ask & Answer base ($SOSFORGE_ASK_BASE): building without the help pages or the ask box; "
+                    "%d Help links point at the docs on GitHub", n)
     (out / "config.json").write_text(json.dumps(ask_cfg, indent=1))
     LOG.info("site built in %s: %d datasets", out, len(entries))
     return manifest

@@ -8,9 +8,9 @@
 #
 # The production environment holds:
 #   vars.AWS_DEPLOY_ROLE_ARN  sosforge-deploy-role's ARN (the account stack's sosforgeDeployRoleArn output)
-#   vars.ASK_API_BASE         the Ask & Answer API base written into the site's config.json
 #   vars.SOS_ZONE_ID          optional: the stevenpenza.com zone ID, which skips a lookup
-#   secrets.ASK_ANSWER_KEY    read-only deploy key for slpenza/ask-answer (panel files and corpus.py)
+# Ask & Answer needs nothing here: the build fetches the release ask.lock.json pins from site/site.toml's ask_base and
+# checks every file against the lock (design/v0/v0.4.2.md), so no clone, deploy key or API variable.
 name: release
 
 on:
@@ -47,18 +47,6 @@ jobs:
       - name: The tag is a scoped version
         run: python3 tools/scope.py --release "$GITHUB_REF_NAME"
 
-      - name: Pinned ask-answer release
-        id: ask
-        run: echo "tag=$(python3 -c 'import tomllib; print(tomllib.load(open("site/site.toml","rb"))["site"]["ask_release"])')" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
-        with:
-          repository: slpenza/ask-answer
-          ref: ${{ steps.ask.outputs.tag }}
-          ssh-key: ${{ secrets.ASK_ANSWER_KEY }}
-          path: ask-answer
-          fetch-depth: 0
-          fetch-tags: true
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -79,8 +67,6 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-          SOSFORGE_ASK_BASE: ${{ vars.ASK_API_BASE }}
-          SOSFORGE_ASK_ANSWER: ../ask-answer
           SOS_ZONE_ID: ${{ vars.SOS_ZONE_ID }}
         run: ./tools/release.sh
 
