@@ -63,7 +63,7 @@ def test_recipe_dates():
 
 
 def test_lengths_and_download_checks(tmp_path, monkeypatch):
-    """Checks lengths in site.toml are validated, named as sos bundle names them (extra lengths and the SOS-labels style as MPEG-4 only, each with a _web.zip preview), listed shortest first with the preview's own length marked, and that a build checking downloads fails on a missing asset but only warns when a release can't be listed. Covers load_config lengths, per, label_style and sources, version_stem, version_stems, variant_name, variant_names, length_entries, missing_downloads, recipe_years and build_site's check with stubbed HTTP; this test is not itself tested."""
+    """Checks lengths in site.toml are validated, named as sos bundle names them (extra lengths and the SOS-labels style as MPEG-4 only, each with a _web.zip preview), listed shortest first with the preview's own length marked, and that a build checking downloads fails on a missing asset but only warns when a release can't be listed. Covers load_config lengths, per, label_style, sources and noaa_catalog, version_stem, version_stems, variant_name, variant_names, length_entries, missing_downloads, recipe_years and build_site's check with stubbed HTTP; this test is not itself tested."""
     head = '[site]\ndomain="d"\n[[datasets]]\nslug="gr"\nrelease="data-1"\npreview="gr_4k_h264.zip"\n'
     cfg = tmp_path / "s.toml"
     for body, msg in (('downloads=["gr_4k.zip"]\nlengths=[20, 20]\n', "distinct"), ('downloads=["gr_4k.zip"]\nlengths=[0]\n', "distinct"),
@@ -114,6 +114,12 @@ def test_lengths_and_download_checks(tmp_path, monkeypatch):
         site.load_config(cfg)
     cfg.write_text(head + 'downloads=["gr_4k.zip"]\nper = { unit = "sport", count = 9 }\n')
     assert site.load_config(cfg)["datasets"][0]["per"] == {"unit": "sport", "count": 9}
+    for bad in ('noaa_catalog = "https://example.com/gr"\n', 'noaa_catalog = true\n'):
+        cfg.write_text(head + 'downloads=["gr_4k.zip"]\n' + bad)
+        with pytest.raises(RecipeError, match="noaa_catalog is its page"):
+            site.load_config(cfg)
+    cfg.write_text(head + 'downloads=["gr_4k.zip"]\nnoaa_catalog = "https://sos.noaa.gov/catalog/datasets/gr/"\n')
+    assert site.load_config(cfg)["datasets"][0]["noaa_catalog"] == "https://sos.noaa.gov/catalog/datasets/gr/"
 
 
 def test_config_validation(tmp_path):

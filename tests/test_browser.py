@@ -50,6 +50,7 @@ slug = "second"
 release = "data-1"
 preview = "second_256x128_h264.zip"
 downloads = ["second_256x128.zip"]
+noaa_catalog = "https://sos.noaa.gov/catalog/datasets/second/"
 [[datasets]]
 slug = "still"
 release = "data-1"
@@ -197,7 +198,7 @@ def test_pages_load_clean(browser, origin, path):
 
 
 def test_gallery_cards_set_downloads(browser, origin):
-    """Checks the cards show date and length pills and the Data line, that the Length and Text selects set what Open in simulator opens and what Download fetches, and that a single-length movie and a still keep a plain Download link and no selects. Covers gallery.js card, versions.js versionPicker and the pace wording; this test is not itself tested."""
+    """Checks the cards show date and length pills and the Data line, that the Length and Text selects set what Open in simulator opens and what Download fetches, and that a single-length movie and a still keep a plain Download link and no selects, and that only a dataset with a NOAA catalog link shows it. Covers gallery.js card, versions.js versionPicker and the pace wording; this test is not itself tested."""
     page, problems = open_page(browser, origin, "/")
     cards = page.locator(".card")
     assert cards.count() == 3
@@ -219,6 +220,9 @@ def test_gallery_cards_set_downloads(browser, origin):
     assert tiny.locator(".poster a").get_attribute("href") == "simulator.html?d=tiny&s=3&text=labels"
     length.select_option("1")
     assert state() == ("simulator.html?d=tiny&text=labels", "tiny_labels_256x128.zip", "Download")
+    assert tiny.locator(".catalog").count() == 0 and still.locator(".catalog").count() == 0
+    assert second.locator(".catalog a").inner_text() == "In NOAA's SOS Data Catalog"
+    assert second.locator(".catalog a").get_attribute("href") == "https://sos.noaa.gov/catalog/datasets/second/"
     for c, pills in ((second, ["1 s loop"]), (still, ["Still image"])):
         assert c.locator(".pills .badge").all_inner_texts() == pills and c.locator("select").count() == 0
         assert c.locator(".actions a.btn:not(.primary)").inner_text() == "Download"

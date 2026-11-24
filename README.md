@@ -154,5 +154,18 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
 - **Moving to another Ask & Answer release** is deliberate, never part of a build: take `corpus.py` from the API's
   `artifacts.base`, check it against the integrity `GET /ask` lists, run
   `python3 corpus.py --project . --lock <ask_base>`, and commit the new `ask.lock.json` with the version that moves.
+- **Submitting a dataset to NOAA's SOS Data Catalog** happens on `sos admin`, a page served only on 127.0.0.1 with
+  your own AWS login, through the aws CLI.
+  - **Drafts:** "Submit to NOAA" drafts the email NOAA's catalog page asks for, from the live `datasets.json`:
+    description, notable features, credits and every zip's link. You fill in its `[[...]]` line, then send it to
+    `sos.support@noaa.gov` through SES.
+  - **The record:** each email goes with a copy to the sending address. The page files that copy and every reply
+    under its dataset, from the S3 prefix where that address's receipt rule stores its mail.
+  - **Safety:** sending stays off until such a rule exists, so a reply can't be lost. The page can only write to
+    NOAA's address.
+  - **Settings:** in `.env.local`, which git ignores: `SOSFORGE_ADMIN_FROM`, `SOSFORGE_ADMIN_NAME`,
+    `SOSFORGE_MAIL_BUCKET` and `SOSFORGE_MAIL_PREFIX`.
+  - **Acceptance:** when NOAA accepts a dataset, "Record catalog link" writes `noaa_catalog = "<its catalog page>"`
+    into `site/site.toml`. Commit that, and the card links it. The correspondence never enters the repo.
 
 MIT licence. Built for NOAA SOS sites, museums and science centres.

@@ -66,6 +66,8 @@ main.narrow { max-width: 860px; }
 .card p.source { flex: 0 0 auto; font-size: .82rem; color: var(--faint); }
 .card p.source a { color: var(--muted); text-decoration-color: var(--rule); }
 .card p.source a:hover { color: var(--accent); }
+.card p.catalog { flex: 0 0 auto; font-size: .82rem; margin-top: -4px; }
+.card p.catalog a { color: var(--accent); }
 .pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .badge { font-size: .78rem; color: var(--muted); border: 1px solid var(--rule); padding: 1px 9px; border-radius: 999px;
   font-variant-numeric: tabular-nums; white-space: nowrap; }

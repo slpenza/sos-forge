@@ -28,7 +28,8 @@ from .timeline import parse_date
 LOG = logging.getLogger("sosforge.site")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SITE_KEYS = {"domain", "repo", "ask_base", "ask_projects", "preview_width"}
-DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist", "dates", "lengths", "per", "label_style", "sources"}
+DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist", "dates", "lengths", "per", "label_style", "sources",
+                "noaa_catalog"}
 STATIC_SKIP = (".test.mjs", "help-head.html", "help-bar.html", "site.toml")
 PANEL_FILES = ("ask-client.js", "ask-panel.js", "ask-panel.css")
 ASK_LOCK = Path(__file__).resolve().parents[1] / "ask.lock.json"   # the pinned Ask & Answer release (design/v0/v0.4.2.md)
@@ -118,8 +119,11 @@ def load_config(path: Path) -> dict:
         if not (isinstance(sources, list) and all(isinstance(x, dict) and set(x) == {"label", "url"} and str(x["label"]).strip()
                                                   and str(x["url"]).startswith("https://") for x in sources)):
             raise RecipeError(f'[[datasets]] {d["slug"]}: sources must be like [{{ label = "...", url = "https://..." }}]')
+        catalog = d.get("noaa_catalog")
+        if catalog is not None and not (isinstance(catalog, str) and catalog.startswith("https://sos.noaa.gov/")):
+            raise RecipeError(f'[[datasets]] {d["slug"]}: noaa_catalog is its page in NOAA\'s catalog, https://sos.noaa.gov/...')
         seen.add(d["slug"])
-        cfg["datasets"].append({"per": per, "sources": sources, "slug": d["slug"], "release": d.get("release"), "preview": d.get("preview"),
+        cfg["datasets"].append({"noaa_catalog": catalog, "per": per, "sources": sources, "slug": d["slug"], "release": d.get("release"), "preview": d.get("preview"),
                                 "downloads": list(d.get("downloads", [])), "dist": d.get("dist"),
                                 "dates": d.get("dates"), "lengths": sorted(lengths), "label_style": label_style})
     return cfg
@@ -532,6 +536,8 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ba
                     e["previews"][style] = version_preview(stem, d["slug"], out, dist=dist, repo=cfg["repo"], release=d["release"],
                                                            width=cfg["preview_width"], ffmpeg=ffmpeg, work=work)
         entry["sources"] = d["sources"]
+        if d.get("noaa_catalog"):
+            entry["noaa_catalog"] = d["noaa_catalog"]
         years = recipe_years(d["slug"])
         entry["per"] = d.get("per") or ({"unit": "year", "count": years} if years else None)
         entries.append(entry)

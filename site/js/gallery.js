@@ -63,7 +63,7 @@ function poster(d, current) {
 }
 
 /**
- * Build one dataset card element with its poster, date or length pill, description, a Data line linking its sources, the version selects when it has more than one version, and Open and Download actions that follow them. Tested in the browser against the built site; there is no DOM test harness.
+ * Build one dataset card element with its poster, date or length pill, description, a Data line linking its sources, its NOAA catalog link once accepted, the version selects when it has more than one version, and Open and Download actions that follow them. Tested in the browser against the built site; there is no DOM test harness.
  */
 function card(d) {
   const art = document.createElement('article');
@@ -110,11 +110,19 @@ function card(d) {
       source.append(...(i ? [' · ', link] : [link]));
     });
   }
+  const catalog = d.noaa_catalog ? document.createElement('p') : null;
+  if (catalog) {
+    catalog.className = 'catalog';
+    const link = document.createElement('a');
+    link.href = d.noaa_catalog; link.rel = 'noopener'; link.textContent = "In NOAA's SOS Data Catalog";
+    catalog.append(link);
+  }
   const actions = document.createElement('div');
   actions.className = 'actions';
   actions.append(sim, ...(dl ? [dl] : []));
   apply();
-  body.append(h, pills, p, ...(source.childNodes.length ? [source] : []), ...(picker ? [picker] : []), actions);
+  body.append(h, pills, p, ...(source.childNodes.length ? [source] : []), ...(catalog ? [catalog] : []),
+              ...(picker ? [picker] : []), actions);
   art.append(pic.frame, body);
   return art;
 }

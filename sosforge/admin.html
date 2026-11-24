@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOAA submissions</title>
+<style>
+  :root { --bg: #f6f7f9; --panel: #fff; --text: #1b1f24; --muted: #5b6470; --rule: #d9dde3; --accent: #b86e00;
+          --ok: #1f7a3a; --warn: #a33a1f; --field: #fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d1015; --panel: #151a21; --text: #e6e9ee; --muted: #9aa3ae; --rule: #2a313b; --accent: #f0a024;
+            --ok: #5cc584; --warn: #f08a6c; --field: #0f1318; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  header, main { width: min(1200px, 100%); margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 1.3rem; margin: 0; }
+  .muted { color: var(--muted); }
+  .banner { border: 1px solid var(--warn); color: var(--warn); padding: 10px 14px; border-radius: 6px; margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; align-items: start; }
+  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; min-width: 0; }
+  section h2 { font-size: 1.1rem; margin: 0 0 6px; }
+  .status { display: inline-block; border: 1px solid var(--rule); border-radius: 999px; padding: 1px 10px; font-size: .85rem; color: var(--muted); }
+  .status.done { border-color: var(--ok); color: var(--ok); }
+  .thread { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 10px; }
+  .thread li { border-left: 3px solid var(--rule); padding: 4px 0 4px 10px; min-width: 0; }
+  .thread li.theirs { border-left-color: var(--accent); }
+  .meta { font-size: .85rem; color: var(--muted); overflow-wrap: anywhere; }
+  .text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 0; max-height: 14em; overflow: auto; font-size: .9rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--rule); background: var(--field); color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; }
+  input, textarea { width: 100%; font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--rule); background: var(--field); color: var(--text); }
+  textarea { min-height: 22em; resize: vertical; font-family: ui-monospace, monospace; font-size: .85rem; }
+  .error { color: var(--warn); margin: 8px 0 0; }
+  .note { color: var(--ok); margin: 8px 0 0; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>NOAA submissions</h1>
+  <span class="muted" id="who"></span>
+  <button id="refresh" type="button">Refresh</button>
+</header>
+<main>
+  <p class="banner" id="banner" hidden></p>
+  <div class="grid" id="grid"><p class="muted">Loading…</p></div>
+  <section id="unfiled" hidden><h2>Mail that names no dataset</h2><ul class="thread" id="unfiled-list"></ul></section>
+</main>
+<script>
+// The admin page for `sos admin` (design/v0/v0.5.0.md). It only talks to the local server that served it, which holds
+// the token below for this run and refuses anything without it.
+const TOKEN = '__TOKEN__';
+let state = null;
+
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+async function api(path, body) {
+  const init = body === undefined ? { headers: { 'X-Admin-Token': TOKEN } }
+    : { method: 'POST', headers: { 'X-Admin-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  const r = await fetch(path, init);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `${r.status}`);
+  return data;
+}
+
+function mail(m) {
+  const li = el('li', m.ours ? 'ours' : 'theirs');
+  li.append(el('div', 'meta', `${m.ours ? 'You' : m.from} · ${m.date.slice(0, 16).replace('T', ' ')} · ${m.subject}`), el('div', 'text', m.text));
+  return li;
+}
+
+function editor(d, box, draft) {
+  box.replaceChildren();
+  const subject = el('input'); subject.value = draft.subject; subject.id = `subject-${d.slug}`;
+  const body = el('textarea'); body.value = draft.body; body.id = `body-${d.slug}`;
+  const err = el('p', 'error'); const note = el('p', 'note');
+  const send = el('button', 'primary', `Send to ${draft.to}`); send.type = 'button';
+  const cancel = el('button', '', 'Cancel'); cancel.type = 'button';
+  let armed = false;
+  send.disabled = !state.ready;
+  send.addEventListener('click', async () => {
+    err.textContent = '';
+    if (!armed) { armed = true; send.textContent = 'Click again to send'; return; }
+    send.disabled = true;
+    try {
+      await api('/api/send', { slug: d.slug, subject: subject.value, body: body.value, reply: draft.reply });
+      note.textContent = 'Sent. Its copy appears in this thread once it is stored, usually within a minute.';
+      box.replaceChildren(note);
+      settle(d.slug, d.thread.length);
+    } catch (e) { err.textContent = e.message; armed = false; send.textContent = `Send to ${draft.to}`; send.disabled = !state.ready; }
+  });
+  cancel.addEventListener('click', () => box.replaceChildren());
+  const lab = (text, f) => { const l = el('label', '', text); l.htmlFor = f.id; return l; };
+  const actions = el('div', 'actions'); actions.append(send, cancel);
+  box.append(el('div', 'meta', `To ${draft.to}, with a copy to ${state.sender}`), lab('Subject', subject), subject,
+             lab('Message', body), body, actions, err);
+}
+
+function catalogForm(d, box) {
+  box.replaceChildren();
+  const url = el('input'); url.id = `catalog-${d.slug}`; url.placeholder = 'https://sos.noaa.gov/catalog/datasets/…'; url.value = d.catalog || '';
+  const save = el('button', 'primary', 'Record in site.toml'); save.type = 'button';
+  const err = el('p', 'error');
+  save.addEventListener('click', async () => {
+    try {
+      await api('/api/catalog', { slug: d.slug, url: url.value });
+      box.replaceChildren(el('p', 'note', 'Recorded in site/site.toml. Commit it with the next version and the card links it.'));
+      await load();
+    } catch (e) { err.textContent = e.message; }
+  });
+  const l = el('label', '', "Its page in NOAA's catalog"); l.htmlFor = url.id;
+  const actions = el('div', 'actions'); actions.append(save);
+  box.append(l, url, actions, err);
+}
+
+function section(d) {
+  const s = el('section'); s.id = `ds-${d.slug}`;
+  s.append(el('h2', '', d.name));
+  const st = el('span', `status${d.catalog ? ' done' : ''}`, d.status);
+  s.append(st);
+  if (d.catalog) { const a = el('a', '', ' catalog page'); a.href = d.catalog; a.rel = 'noopener'; s.append(a); }
+  const list = el('ul', 'thread'); list.append(...d.thread.map(mail));
+  if (d.thread.length) s.append(list);
+  const box = el('div');
+  const write = el('button', 'primary', d.thread.length ? 'Write to NOAA' : 'Submit to NOAA'); write.type = 'button';
+  write.addEventListener('click', async () => {
+    try { editor(d, box, await api('/api/draft', { slug: d.slug })); } catch (e) { box.replaceChildren(el('p', 'error', e.message)); }
+  });
+  const cat = el('button', '', d.catalog ? 'Change catalog link' : 'Record catalog link'); cat.type = 'button';
+  cat.addEventListener('click', () => catalogForm(d, box));
+  const actions = el('div', 'actions'); actions.append(write, cat);
+  s.append(actions, box);
+  return s;
+}
+
+// After a send, look again every 10 s for a minute until the dataset's thread has grown by the stored copy.
+function settle(slug, had, tries = 6) {
+  if (!tries) return;
+  setTimeout(async () => {
+    await load();
+    const d = state.datasets.find((x) => x.slug === slug);
+    if (!d || d.thread.length <= had) settle(slug, had, tries - 1);
+  }, 10000);
+}
+
+async function load() {
+  try {
+    state = await api('/api/state');
+  } catch (e) {
+    document.getElementById('grid').replaceChildren(el('p', 'error', e.message));
+    return;
+  }
+  document.getElementById('who').textContent = `Sending as ${state.sender} to ${state.noaa}`;
+  const banner = document.getElementById('banner');
+  banner.hidden = state.ready;
+  banner.textContent = `Mail to ${state.sender} isn't being stored yet, so a reply from NOAA would be lost. Sending is off until it is.`;
+  document.getElementById('grid').replaceChildren(...state.datasets.map(section));
+  const un = document.getElementById('unfiled');
+  un.hidden = !state.unfiled.length;
+  document.getElementById('unfiled-list').replaceChildren(...state.unfiled.map(mail));
+}
+
+document.getElementById('refresh').addEventListener('click', load);
+load();
+</script>
+</body>
+</html>

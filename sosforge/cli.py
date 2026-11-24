@@ -151,6 +151,19 @@ def cmd_upload_help(args) -> int:
     return 0
 
 
+def cmd_admin(args) -> int:
+    """Serve the local admin page for submitting published datasets to NOAA and reading their replies, until Ctrl-C. Tested by test_admin.py through Admin and serve(); the command wrapper and the aws CLI ports are exercised manually."""
+    from .admin import Admin, aws_ports, load_config, serve
+    cfg = load_config(Path(args.config))
+    srv = serve(Admin(cfg, aws_ports(cfg)), args.port)
+    print(f"NOAA submissions: http://127.0.0.1:{srv.server_address[1]}/  (local only; Ctrl-C to stop)")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     """Build the argparse tree for all subcommands. Tested by test_cli.py::test_new_list_check_and_resolve."""
     ap = argparse.ArgumentParser(prog="sos", description="Build NOAA Science On a Sphere datasets from recipes.")
@@ -211,6 +224,10 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "site" / "site.toml"))
     p.add_argument("--ask-base", help="Ask & Answer API base (default $SOSFORGE_ASK_BASE, then site.toml's ask_base)")
     p.set_defaults(fn=cmd_upload_help)
+    p = sub.add_parser("admin", help="the local page for submitting published datasets to NOAA and keeping their replies")
+    p.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "site" / "site.toml"))
+    p.add_argument("--port", type=int, default=8030)
+    p.set_defaults(fn=cmd_admin)
     return ap
 
 
