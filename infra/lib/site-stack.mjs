@@ -10,35 +10,9 @@ import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { fileURLToPath } from 'node:url';
+import { csp, originOf } from './csp.mjs';
 
-/**
- * Build the Content-Security-Policy, allowing inline script only where the help viewer needs it and the Ask API as the one other origin. Tested by site-stack.test.mjs "headers are strict on the site and relaxed only for help".
- */
-export function csp({ askOrigin = '', inlineScripts = false } = {}) {
-  const connect = ["'self'", askOrigin].filter(Boolean).join(' ');
-  return [
-    "default-src 'self'",
-    `script-src 'self'${inlineScripts ? " 'unsafe-inline'" : ''}`,
-    `style-src 'self'${inlineScripts ? " 'unsafe-inline'" : ''}`,
-    "img-src 'self' data: blob:",
-    "media-src 'self' blob:",
-    `connect-src ${connect}`,
-    "font-src 'self'",
-    "object-src 'none'",
-    "base-uri 'none'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-  ].join('; ');
-}
-
-/**
- * Return the origin (scheme and host) of a URL, or an empty string for none. Tested by site-stack.test.mjs "headers are strict on the site and relaxed only for help".
- */
-export function originOf(url) {
-  if (!url) return '';
-  const u = new URL(url);
-  return `${u.protocol}//${u.host}`;
-}
+export { csp, originOf };
 
 export class SiteStack extends cdk.Stack {
   /**

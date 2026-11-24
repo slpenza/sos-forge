@@ -117,8 +117,11 @@ cached in `~/.cache/sosforge`, and OpenStreetMap queries are cached for 30 days 
 ```bash
 git config core.hooksPath tools/hooks   # once per clone: blob-size and scope-doc pre-commit gate
 cp .env.example .env.local              # tokens live here (gitignored); `sos` loads it
-pytest                                  # 116 tests (97 + 19 scope-hook); two use the real Moon maps if cached
+pytest                                  # 146 tests, 9 of them in headless Chrome when Playwright is installed
 node --test site/js/*.test.mjs          # simulator logic
+pip install -e ".[browser]"             # once: Playwright, which drives your installed Google Chrome
+python -m pytest tests/test_browser.py  # the built site in headless Chrome, under the deployed CSP
+python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages, every download answers
 (cd infra && npm ci && npm test)        # site stack synth
 ```
 

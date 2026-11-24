@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sos-forge"
-version = "0.4.0"
+version = "0.4.1"
 description = "Build NOAA Science On a Sphere datasets from open data with declarative recipes"
 readme = "README.md"
 license = "MIT"
@@ -22,6 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 fit = ["fitdecode>=0.10"]
 dev = ["pytest>=8"]
+browser = ["playwright>=1.48"]   # headless Chrome tests and the post-deploy smoke check (design/v0/v0.4.1.md)
 
 [project.scripts]
 sos = "sosforge.cli:main"
