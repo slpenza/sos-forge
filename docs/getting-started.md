@@ -1,7 +1,7 @@
 # Make your first dataset
 
 sos-forge turns a short recipe into a dataset you can copy straight onto a Science On a Sphere. This page goes
-from nothing to a dataset on your screen in a few minutes.
+from nothing to a dataset on your screen in a few minutes, then to one made from your own data.
 
 ## Install
 
@@ -36,29 +36,63 @@ To look at a single moment without building a video, render one frame as a pictu
 sos still lunar_phases 180 --preview      # frame 180 of 720: First Quarter
 ```
 
-## Make your own
+## Make a dataset from your own data
 
-```bash
-sos new "Coffee Shops"
-sos build coffee_shops --preview
-```
+You can build a dataset from your own files. Three kinds work without writing any code:
 
-`sos new` creates `recipes/coffee_shops/` with a recipe and a small sample spreadsheet of world cities, so the
-first build works straight away. Replace `data/places.csv` with your own places. It needs `lat` and `lon`
-columns, and anything else can come along, such as a number to make some places brighter.
+| Your data | What it becomes | Start from |
+|---|---|---|
+| Places: a CSV with `lat` and `lon` columns | Glowing points, brighter where a number is bigger | `sos new`, below |
+| A value for each country, or for regions of your own: a CSV of code, year and value | Regions shaded by the value, changing year by year in a movie | The `regions` layer in step 2 |
+| GPS tracks: GPX, TCX or FIT files from a watch or fitness app | Your routes glowing on the globe, with a zoomed inset | The bundled `my_activities` |
 
-Open `recipe.toml` to change what it shows. The comments explain each line, and
-[the recipe reference](recipe-reference.md) lists every option. A misspelled setting stops the build and
-suggests the right one, so you can experiment freely.
+1. **Start a recipe.**
 
-## Build it full size
+   ```bash
+   sos new "Coffee Shops"
+   sos build coffee_shops --preview
+   ```
 
-```bash
-sos build coffee_shops
-```
+   `sos new` creates `recipes/coffee_shops/` with a recipe and a small sample spreadsheet of world cities, so the
+   first build works straight away.
+2. **Put your data in.** Replace `data/places.csv` with your own places. It needs `lat` and `lon` columns, and
+   anything else can come along, such as a number to make some places brighter. For regions, replace the
+   `points` layer in `recipe.toml` with this one:
 
-This writes `dist/coffee_shops/`, the folder you copy to the sphere. See
-[Put a dataset on your sphere](deploying.md).
+   ```toml
+   [[layers]]
+   type = "regions"
+   # countries, by ISO 3166 alpha-3 code such as BRA
+   regions = { type = "natural_earth" }
+   # a CSV with the columns code, year and value
+   data = { type = "table", path = "data/values.csv" }
+   ```
+
+   There are no places to count, so also change `subtitle` under `[hud]` to
+   `"{regions_with_data} countries with data"`. For regions of your own, use
+   `regions = { type = "geojson_regions", path = "data/areas.geojson" }`, with a `code` and a `name` property on
+   each polygon. For GPS tracks, copy your files into `recipes/my_activities/data/` and build `my_activities`
+   instead.
+3. **Choose what it shows.** Open `recipe.toml`. The comments explain each line, and
+   [the recipe reference](recipe-reference.md) lists every layer, source and option. A misspelled setting stops
+   the build and suggests the right one, so you can experiment freely.
+4. **Credit your source.** Replace the `credits` line with where your data came from. Credits travel with the
+   dataset, in its playlist description and README. See
+   [Where the data comes from, and what you may do with it](data-sources.md).
+5. **Check it on a sphere.** Open the folder `sos build` made in [the simulator](simulator.md), and look at it
+   from where visitors stand before you copy it anywhere.
+6. **Build it full size and copy it to your sphere.**
+
+   ```bash
+   sos build coffee_shops
+   ```
+
+   This writes `dist/coffee_shops/`, the folder you copy to the sphere's site-custom area. See
+   [Put a dataset on your sphere](deploying.md).
+
+Your dataset stays on your computer and your sphere; it isn't added to this site's gallery. sos-forge can also
+fetch OpenStreetMap features or any Our World in Data chart for you, and anything the layers can't draw goes in a
+`recipe.py`. [The recipe reference](recipe-reference.md) covers both.
 
 ## Make a movie longer or shorter
 

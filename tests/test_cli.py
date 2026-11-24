@@ -1,6 +1,9 @@
 """Tests for the `sos` command line."""
 from __future__ import annotations
 
+import re
+import textwrap
+
 import pytest
 
 from conftest import REPO
@@ -27,6 +30,42 @@ def test_new_list_check_and_resolve(tmp_path, monkeypatch, capsys):
     with pytest.raises(RecipeError, match="not found"):
         find_recipe("nope")
     assert cli.main(["check", "nope"]) == 2
+
+
+AREAS = ('{"type":"FeatureCollection","features":['
+         '{"type":"Feature","properties":{"code":"A","name":"Area A"},"geometry":{"type":"Polygon",'
+         '"coordinates":[[[0,0],[20,0],[20,20],[0,20],[0,0]]]}},'
+         '{"type":"Feature","properties":{"code":"B","name":"Area B"},"geometry":{"type":"Polygon",'
+         '"coordinates":[[[-60,-10],[-40,-10],[-40,10],[-60,10],[-60,-10]]]}}]}')
+
+
+def own_regions_recipe(doc: str, folder) -> str:
+    """Return `sos new`'s recipe with the points layer and the region source swapped for the lines docs/getting-started.md gives, and write the two-polygon data they need. Helper for test_getting_started_own_regions_build; not itself tested."""
+    block = textwrap.dedent(re.search(r"```toml\n(.*?)```", doc, re.S).group(1))
+    own = re.search(r'`(regions = \{ type = "geojson_regions"[^`]*)`', doc).group(1)
+    block = re.sub(r"^regions = .*$", own, block, flags=re.M)
+    t = (folder / "recipe.toml").read_text().replace('name = "black_marble"', 'color = "#101010"')
+    t = t[:t.index('[[layers]]\ntype = "points"')] + block + "\n" + t[t.index("[hud]"):]
+    (folder / "data" / "areas.geojson").write_text(AREAS)
+    (folder / "data" / "values.csv").write_text("code,year,value\nA,2020,10\nB,2020,40\n")
+    return t
+
+
+def test_getting_started_own_regions_build(tmp_path, monkeypatch, caplog):
+    """Checks the own-data steps in docs/getting-started.md build as written: its regions layer in place of `sos new`'s points, its HUD subtitle and its geojson_regions line, and that keeping the places subtitle fails, as it did before the doc said to change it. Covers the documented lines through cmd_new and cmd_build; the natural_earth source in the doc's block is exercised by the getting_richer builds, not here."""
+    doc = (REPO / "docs" / "getting-started.md").read_text()
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["new", "Coffee Shops"]) == 0
+    folder = tmp_path / "recipes" / "coffee_shops"
+    t = own_regions_recipe(doc, folder)
+    build = ["build", "coffee_shops", "--width", "256", "--workers", "1", "--out", str(tmp_path / "dist")]
+    (folder / "recipe.toml").write_text(t)
+    assert cli.main(build) != 0
+    assert "uses {count}" in caplog.text
+    subtitle = re.search(r'`("\{regions_with_data\}[^`]*")`', doc).group(1)
+    (folder / "recipe.toml").write_text(re.sub(r"^subtitle = .*$", f"subtitle = {subtitle}", t, flags=re.M))
+    assert cli.main(build) == 0
+    assert list((tmp_path / "dist" / "coffee_shops").glob("coffee_shops_*.jpg"))
 
 
 def test_env_local_loaded_without_override(tmp_path, monkeypatch):
