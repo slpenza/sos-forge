@@ -2,7 +2,7 @@
 # sos build lunar_phases --preview   (1024x512 in ~15 s)      sos build lunar_phases   (4096x2048, ~4 min)
 
 [dataset]
-name = "Lunar Phases (29.5-Day Synodic Cycle)"
+name = "Lunar Phases"
 slug = "lunar_phases"
 stem = "moon_phases"
 description = "High-resolution Lunar Reconnaissance Orbiter (LRO) visualization showing solar illumination across both the near and far sides of the tidally locked Moon over a 29.5-day cycle."

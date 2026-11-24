@@ -73,6 +73,16 @@ preview = "cities_growing_4k_h264.zip"
 downloads = ["cities_growing_4k.zip", "cities_growing_4k_h264.zip"]
 
 [[datasets]]
+slug = "lunar_phases"
+lengths = [15, 59, 118]
+label_style = true
+sources = [{ label = "NASA Scientific Visualization Studio, CGI Moon Kit", url = "https://svs.gsfc.nasa.gov/4720" }]
+per = { unit = "day", count = 29.5 }  # its pace: one synodic month; it has no dates for the build to take a step from
+release = "data-2026-11"
+preview = "lunar_phases_4k_h264.zip"
+downloads = ["lunar_phases_4k.zip", "lunar_phases_4k_h264.zip"]
+
+[[datasets]]
 slug = "tonight_aurora"
 sources = [{ label = "NOAA Space Weather Prediction Center, OVATION", url = "https://www.swpc.noaa.gov/products/aurora-30-minute-forecast" }]
 release = "data-2026-11"
