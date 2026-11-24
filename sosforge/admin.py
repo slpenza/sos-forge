@@ -155,14 +155,14 @@ class Admin:
         return datasets, noaa.file_mail(mails, datasets, self.cfg.address)
 
     def state(self) -> dict:
-        """Return what the page shows: whether replies would be stored, and each dataset with its status, catalog link and thread, then mail that names no dataset. Tested by test_admin.py::test_admin_files_drafts_sends_and_records."""
+        """Return what the page shows: whether replies would be stored, each dataset with its status, catalog link and thread, the site's suggestions newest first, then mail that names no dataset. Tested by test_admin.py::test_admin_files_drafts_sends_and_records."""
         datasets, filed = self.filed()
         cats = catalogs(self.cfg.site_toml)
         return {"sender": self.cfg.address, "noaa": noaa.NOAA_ADDRESS, "ready": self.ports.inbound_ready(self.cfg.address),
                 "datasets": [{"slug": d["slug"], "name": d["name"], "catalog": cats.get(d["slug"]),
                               "status": noaa.status(filed[d["slug"]], cats.get(d["slug"])), "thread": filed[d["slug"]]}
                              for d in datasets],
-                "unfiled": filed[""]}
+                "suggestions": filed[noaa.SUGGESTIONS][::-1], "unfiled": filed[""]}
 
     def draft(self, slug: str) -> dict:
         """Return the email to write next for a dataset: the submission when nothing has been sent, otherwise a reply to the latest message in its thread. Tested by test_admin.py::test_admin_files_drafts_sends_and_records."""

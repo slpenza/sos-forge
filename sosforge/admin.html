@@ -49,6 +49,7 @@
 <main>
   <p class="banner" id="banner" hidden></p>
   <div class="grid" id="grid"><p class="muted">Loading…</p></div>
+  <section id="suggestions" hidden><h2>Suggestions from the site</h2><ul class="thread" id="suggestions-list"></ul></section>
   <section id="unfiled" hidden><h2>Mail that names no dataset</h2><ul class="thread" id="unfiled-list"></ul></section>
 </main>
 <script>
@@ -160,6 +161,8 @@ async function load() {
   banner.hidden = state.ready;
   banner.textContent = `Mail to ${state.sender} isn't being stored yet, so a reply from NOAA would be lost. Sending is off until it is.`;
   document.getElementById('grid').replaceChildren(...state.datasets.map(section));
+  document.getElementById('suggestions').hidden = !(state.suggestions || []).length;
+  document.getElementById('suggestions-list').replaceChildren(...(state.suggestions || []).map(mail));
   const un = document.getElementById('unfiled');
   un.hidden = !state.unfiled.length;
   document.getElementById('unfiled-list').replaceChildren(...state.unfiled.map(mail));

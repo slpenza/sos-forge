@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suggest a dataset: SOS Forge</title>
+<meta name="description" content="Know of open data that would make a good Science On a Sphere dataset? Tell us where it is and what it would show.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/site.css">
+<script type="module" src="js/suggest.js"></script>
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="/"><img src="favicon.svg" alt="" width="22" height="22">SOS Forge</a>
+  <nav aria-label="Site">
+    <a href="/">Datasets</a>
+    <a href="simulator.html">Simulator</a>
+    <a href="help/">Help</a>
+    <a href="changes.html">What's new</a>
+    <a href="suggest.html" aria-current="page">Suggest</a>
+    <a href="https://github.com/slpenza/sos-forge">GitHub</a>
+  </nav>
+</header>
+<main class="narrow">
+  <section class="hero">
+    <h1>Suggest a dataset</h1>
+    <p>Know of open data that would look good on a sphere? Tell us where it is, under what licence, and what it would
+      show. Every suggestion is read, though not every one can be built.</p>
+  </section>
+  <form id="suggest" class="suggest" novalidate>
+    <div class="row">
+      <label for="s-url">Where the data is</label>
+      <input id="s-url" name="url" type="url" inputmode="url" maxlength="500" placeholder="https://" autocomplete="url"
+        aria-describedby="s-url-hint" required>
+      <p id="s-url-hint" class="hint">A link to the data itself, or to the page it&rsquo;s published on.</p>
+    </div>
+    <fieldset class="row">
+      <legend>Its licence</legend>
+      <div class="choices" id="s-licences"></div>
+      <div class="row" id="s-licence-url-row" hidden>
+        <label for="s-licence-url">A link to the licence</label>
+        <input id="s-licence-url" name="licence_url" type="url" inputmode="url" maxlength="500" placeholder="https://">
+      </div>
+    </fieldset>
+    <div class="row">
+      <label for="s-shows">What it would show on a sphere</label>
+      <textarea id="s-shows" name="shows" rows="4" maxlength="1000" aria-describedby="s-shows-count" required></textarea>
+      <p id="s-shows-count" class="hint"><span id="s-count">0</span> of 1,000 characters</p>
+    </div>
+    <div class="row">
+      <label for="s-email">Your email <span class="opt">(optional, only so we can reply)</span></label>
+      <input id="s-email" name="email" type="email" maxlength="254" autocomplete="email">
+    </div>
+    <!-- For bots only: hidden from people and screen readers, and out of the tab order. A filled one sends nothing. -->
+    <div class="hp" aria-hidden="true">
+      <label for="s-website">Website</label>
+      <input id="s-website" name="website" type="text" tabindex="-1" autocomplete="off">
+    </div>
+    <label class="check" for="s-agree">
+      <input id="s-agree" name="agree" type="checkbox" required>
+      <span>To my knowledge, the licence above is the one this data is published under. SOS Forge checks every licence
+        before using any data.</span>
+    </label>
+    <p class="privacy">What&rsquo;s kept: your suggestion and, if you give one, your email, in the maintainer&rsquo;s private
+      mailbox until they&rsquo;re deleted. Your email is used only to reply. Nothing is published or shared. To limit how
+      many suggestions come from one place, your network address is kept for 24 hours as a one-way code, never as the
+      address itself.</p>
+    <div class="send">
+      <button class="btn primary" type="submit">Send suggestion</button>
+      <p id="s-status" class="status-line" role="status" aria-live="polite"></p>
+    </div>
+  </form>
+  <section id="s-thanks" class="thanks" hidden tabindex="-1">
+    <h2>Thank you</h2>
+    <p>Your suggestion is with us. Every one is read, though not every one can be built. If you left an email, any
+      reply comes from a person.</p>
+    <p><a class="btn" href="suggest.html">Suggest another</a> <a class="btn" href="/">Back to the datasets</a></p>
+  </section>
+</main>
+<footer class="foot">
+  <p>Every dataset carries its own credits and licences. sos-forge is MIT-licensed.</p>
+</footer>
+</body>
+</html>

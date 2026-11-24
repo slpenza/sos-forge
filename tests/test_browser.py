@@ -195,7 +195,7 @@ def test_watch_catches_errors(browser, origin):
     assert "boom" in text and "Content Security Policy" in text and "HTTP 404" in text and "missing.json" in text
 
 
-@pytest.mark.parametrize("path", ["/", "/simulator.html", "/simulator.html?d=tiny", "/changes.html", "/404.html"])
+@pytest.mark.parametrize("path", ["/", "/simulator.html", "/simulator.html?d=tiny", "/changes.html", "/suggest.html", "/404.html"])
 def test_pages_load_clean(browser, origin, path):
     """Checks each page loads under the deployed CSP with no console or script errors and no failed same-origin requests. Covers the static pages, gallery.js, simulator.js and their imports; this test is not itself tested."""
     page, problems = open_page(browser, origin, path)
@@ -408,7 +408,7 @@ SMALLEST_TEXT = """() => {
 }"""
 
 
-@pytest.mark.parametrize("path", ["/", "/simulator.html?d=tiny", "/changes.html", "/404.html"])
+@pytest.mark.parametrize("path", ["/", "/simulator.html?d=tiny", "/changes.html", "/suggest.html", "/404.html"])
 def test_no_text_is_smaller_than_14px(browser, origin, path):
     """Checks every visible line of text on each site page is at least 14 px, the floor set for older readers (design/v0/v0.5.3.md). Covers site.css's sizes against the built pages; Help's are checked by test_home_ask_box_hands_the_question_to_help."""
     page, problems = open_page(browser, origin, path)
@@ -416,6 +416,61 @@ def test_no_text_is_smaller_than_14px(browser, origin, path):
     px, where = page.evaluate(SMALLEST_TEXT)
     assert px >= 14 - 0.05, f"{path}: {px}px at {where}"
     assert problems == []
+
+
+def test_suggest_form(browser, origin):
+    """Checks the Suggest a dataset form: seven licences with Other asking for a link, a missing field named and focused before anything is posted, the honeypot off screen and out of the tab order, a valid suggestion posted as JSON to /api/suggest with the fill-time stamp and an empty honeypot and answered with the thank-you, and a 429 shown in the server's words with the form kept; no sideways scroll at 390 px. Covers suggest.html and suggest.js against a stand-in API; the API itself is tested by infra/test/suggest.test.mjs."""
+    page, problems = open_page(browser, origin, "/suggest.html")
+    posted = []
+
+    def answer(status, body):
+        """Answer the form's POST with a canned status and body, recording what was sent. Helper; not itself tested."""
+        def handler(route):
+            posted.append(json.loads(route.request.post_data))
+            route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
+        return handler
+
+    page.route("**/api/suggest", answer(200, {"ok": True}))
+    radios = page.locator('#s-licences input[type="radio"]')
+    assert radios.count() == 7 and page.locator("#s-licence-url-row").is_hidden()
+    page.get_by_label("Other").check()
+    assert page.locator("#s-licence-url-row").is_visible()
+    page.locator('button[type="submit"]').click()
+    assert page.locator("#s-status").inner_text().startswith("Give the data")
+    assert page.locator("#s-url").get_attribute("aria-invalid") == "true"
+    assert page.evaluate("document.activeElement.id") == "s-url" and posted == []
+    hp = page.locator("#s-website")
+    assert hp.get_attribute("tabindex") == "-1" and hp.bounding_box()["x"] < 0
+    assert page.locator(".hp").get_attribute("aria-hidden") == "true"
+    page.locator("#s-url").fill("https://data.example.org/quakes.csv")
+    page.get_by_label("CC BY 4.0").check()
+    assert page.locator("#s-licence-url-row").is_hidden()
+    page.locator("#s-shows").fill("Every earthquake since 1900, sized by magnitude.")
+    page.locator("#s-email").fill("pat@example.org")
+    page.locator("#s-agree").check()
+    page.locator('button[type="submit"]').click()
+    page.locator("#s-thanks").wait_for(state="visible")
+    assert page.locator("#suggest").is_hidden() and len(posted) == 1
+    sent = posted[0]
+    assert {k: sent[k] for k in ("url", "licence", "shows", "email", "agree", "website")} == {
+        "url": "https://data.example.org/quakes.csv", "licence": "CC BY 4.0",
+        "shows": "Every earthquake since 1900, sized by magnitude.", "email": "pat@example.org", "agree": True, "website": ""}
+    assert isinstance(sent["shown_at"], (int, float)) and sent["shown_at"] > 0
+    page.goto(origin + "/suggest.html", wait_until="networkidle")
+    page.unroute("**/api/suggest")
+    page.route("**/api/suggest", answer(429, {"error": "That's the most suggestions we take from one place in an hour."}))
+    page.locator("#s-url").fill("https://data.example.org/b.csv")
+    page.get_by_label("I don't know").check()
+    page.locator("#s-shows").fill("Rivers.")
+    page.locator("#s-agree").check()
+    page.locator('button[type="submit"]').click()
+    page.wait_for_function("() => document.getElementById('s-status').textContent.includes('in an hour')")
+    assert page.locator("#suggest").is_visible() and page.locator("#s-thanks").is_hidden()
+    phone = browser.new_page(viewport={"width": 390, "height": 844})
+    phone.goto(origin + "/suggest.html", wait_until="networkidle")
+    assert phone.evaluate("document.documentElement.scrollWidth") <= 390
+    phone.close()
+    assert [p for p in problems if "429" not in p] == []   # the 429 was asked for
 
 
 def test_download_urls_cover_every_choice(origin):

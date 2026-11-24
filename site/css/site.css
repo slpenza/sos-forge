@@ -142,3 +142,31 @@ body.sim { display: flex; flex-direction: column; min-height: 100dvh; }
 
 /* Ask & Answer's box on the home page: its Ask button is a ratio of --ask-size, held to the site's floor. */
 .home-ask .ask-boxbtn { font-size: max(14px, .78em); }
+
+/* Suggest a dataset (design/v0/v0.6.0.md): one column of labelled fields that fills a phone and stops at a readable width. */
+.suggest { display: grid; gap: 20px; max-width: 640px; }
+.suggest .row { display: grid; gap: 6px; margin: 0; }
+.suggest[hidden], .suggest [hidden], .thanks[hidden] { display: none; }
+.suggest fieldset { border: 0; padding: 0; min-width: 0; }
+.suggest label, .suggest legend { font-weight: 600; color: var(--fg); padding: 0; }
+.suggest .opt { font-weight: 400; color: var(--muted); }
+.suggest input[type="url"], .suggest input[type="email"], .suggest input[type="text"], .suggest textarea {
+  width: 100%; box-sizing: border-box; font: inherit; color: var(--fg); background: var(--panel-2);
+  border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; }
+.suggest textarea { resize: vertical; min-height: 6.5em; }
+.suggest input:focus-visible, .suggest textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.suggest [aria-invalid="true"] { border-color: var(--accent); }
+.suggest .hint { margin: 0; color: var(--muted); font-size: .9rem; }
+.suggest .choices { display: grid; gap: 6px 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  margin: 8px 0 4px; }
+.suggest .choices[aria-invalid="true"] { outline: 1px solid var(--accent); outline-offset: 6px; border-radius: 4px; }
+.suggest .choice { display: flex; gap: 8px; align-items: center; font-weight: 400; color: var(--fg); }
+.suggest .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; }
+.suggest .check input { margin-top: .3em; flex: 0 0 auto; }
+.suggest .privacy { margin: 0; color: var(--muted); font-size: .9rem; }
+.suggest .send { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.suggest .status-line { margin: 0; color: var(--fg); }
+.suggest .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.thanks { max-width: 640px; }
+.thanks:focus { outline: none; }
+.hero .suggest-line { margin: 14px 0 0; font-size: .95rem; }

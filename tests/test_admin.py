@@ -69,7 +69,7 @@ def test_rule_stores_reads_the_rule_set():
 
 
 def test_admin_files_drafts_sends_and_records(setup):
-    """Checks the admin's actions end to end over fake ports: state lists each dataset as not submitted, or in the catalog when site.toml says so; the draft is the submission; sending refuses a draft with its [[...]] line and refuses while replies wouldn't be stored, sending nothing; once ready it sends only to NOAA with a copy to the sender, marked with the slug; with the copy stored the next draft answers it and threads; and a recorded catalog link lands in site.toml and the status. Covers Admin.state, filed, draft, send, record_catalog and catalogs; the aws CLI ports are exercised by sos admin."""
+    """Checks the admin's actions end to end over fake ports: state lists each dataset as not submitted, or in the catalog when site.toml says so; the draft is the submission; sending refuses a draft with its [[...]] line and refuses while replies wouldn't be stored, sending nothing; once ready it sends only to NOAA with a copy to the sender, marked with the slug; with the copy stored the next draft answers it and threads; a recorded catalog link lands in site.toml and the status; and the site's suggestions list apart, newest first, without joining a dataset's thread. Covers Admin.state, filed, draft, send, record_catalog and catalogs; the aws CLI ports are exercised by sos admin."""
     admin, fake = setup
     st = admin.state()
     assert st["ready"] is False and [d["status"] for d in st["datasets"]] == ["Not submitted", "In NOAA's SOS Data Catalog"]
@@ -105,6 +105,13 @@ def test_admin_files_drafts_sends_and_records(setup):
     admin.record_catalog("gr", " https://sos.noaa.gov/catalog/datasets/getting-richer/ ")
     assert catalogs(admin.cfg.site_toml)["gr"] == "https://sos.noaa.gov/catalog/datasets/getting-richer/"
     assert admin.state()["datasets"][0]["status"] == "In NOAA's SOS Data Catalog"
+    # A suggestion from the site's form lists apart, newest first, even when its subject names a dataset.
+    for n, day in ((1, 3), (2, 4)):
+        fake.mail[f"mail/sos/s{n}"] = raw("SOS Forge suggestions <sos-suggest@example.org>", f"Dataset suggestion: Getting Richer {n}",
+                                          datetime(2030, 1, day, tzinfo=timezone.utc), f"<s{n}@example.org>", suggestion=True)
+    st = admin.state()
+    assert [m["key"] for m in st["suggestions"]] == ["mail/sos/s2", "mail/sos/s1"]
+    assert [m["key"] for m in st["datasets"][0]["thread"]] == ["mail/sos/1", "mail/sos/2"] and st["unfiled"] == []
 
 
 def call(port, method, path, *, token=None, host=None, origin=None, body=None):

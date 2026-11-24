@@ -44,6 +44,10 @@ README has the exact commands and checksums).
   file checked against the lock. `sos site --no-ask` builds without it (a fork, say): the gallery and simulator stay,
   and Help links open the docs on GitHub
 
+- **Suggest a dataset,** a form that sends a link, its licence and what it would show to the maintainer's mailbox
+  through a small API on the site's own address (`infra/lambda/suggest`), behind a honeypot and rate limits
+  (design/v0/v0.6.0.md)
+
 `infra/` deploys it, but only from a pushed version tag (see design/v0/v0.2.0.md).
 
 Every animation also carries `labels.txt`, one line of text per frame. SOS can draw it as fixed labels around the

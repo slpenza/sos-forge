@@ -16,5 +16,7 @@ new SiteStack(app, 'SosForgeSite', {
   zoneId: process.env.SOS_ZONE_ID || undefined,
   siteDir: process.env.SOSFORGE_SITE_DIR || fileURLToPath(new URL('../../build/site', import.meta.url)),
   askBase: process.env.SOSFORGE_ASK_BASE || '',
+  // Suggest a dataset (design/v0/v0.6.0.md): sent from its own address to the one the NOAA admin page reads.
+  suggest: { from: 'sos-suggest@stevenpenza.com', to: 'sos@stevenpenza.com' },
   description: 'sos.stevenpenza.com: the sos-forge gallery, simulator, help and Ask (github.com/slpenza/sos-forge)',
 });

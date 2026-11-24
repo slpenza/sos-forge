@@ -15,6 +15,8 @@ from email.message import EmailMessage
 
 NOAA_ADDRESS = "sos.support@noaa.gov"
 DATASET_HEADER = "X-SOS-Forge-Dataset"
+SUGGESTION_HEADER = "X-SOS-Forge-Suggestion"   # set by the site's Suggest a dataset form (design/v0/v0.6.0.md)
+SUGGESTIONS = "@suggestions"                    # file_mail's key for them; "@" can't start a slug
 CATALOG_PREFIX = "https://sos.noaa.gov/"
 FILL = re.compile(r"\[\[[^\]]*\]\]")
 
@@ -146,19 +148,24 @@ def parse_mail(raw: bytes, key: str = "") -> dict:
         "date": when.isoformat() if when else "",
         "subject": str(msg["Subject"] or ""),
         "dataset": (msg[DATASET_HEADER] or "").strip(),
+        "suggestion": bool((msg[SUGGESTION_HEADER] or "").strip()),
         "text": text_of(msg),
     }
 
 
 def file_mail(mails: list[dict], datasets: list[dict], sender_address: str) -> dict:
-    """Return {slug: [mail, ...], "": [unfiled]} in date order: a sent copy by its dataset mark, a reply by the message it answers, else by a dataset's name in the subject; each mail gains `ours`. Tested by test_noaa.py::test_mail_files_under_its_dataset."""
+    """Return {slug: [mail, ...], SUGGESTIONS: [...], "": [unfiled]} in date order: a site suggestion by its mark first, then a sent copy by its dataset mark, a reply by the message it answers, else by a dataset's name in the subject; each mail gains `ours`. Tested by test_noaa.py::test_mail_files_under_its_dataset."""
     names = sorted(((d["name"].lower(), d["slug"]) for d in datasets), key=lambda x: -len(x[0]))
     slugs = {d["slug"] for d in datasets}
     thread_of: dict[str, str] = {}
     out: dict[str, list] = {d["slug"]: [] for d in datasets}
     out[""] = []
+    out[SUGGESTIONS] = []
     for m in sorted(mails, key=lambda m: m["date"]):
         m = {**m, "ours": sender_address.lower() in m["from"].lower()}
+        if m.get("suggestion"):   # before any name match: a suggestion may name a dataset without being NOAA's mail
+            out[SUGGESTIONS].append(m)
+            continue
         slug = m["dataset"] if m["dataset"] in slugs else ""
         if not slug:
             slug = next((thread_of[i] for i in [m["in_reply_to"], *reversed(m["references"])] if i in thread_of), "")
