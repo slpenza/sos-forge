@@ -44,7 +44,8 @@ main.narrow { max-width: 860px; }
 .hero h1 { font-size: clamp(1.6rem, 3.6vw, 2.6rem); }
 .hero p { color: var(--muted); font-size: 1.05rem; }
 .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.cta .home-ask { flex: 1 1 320px; min-width: 0; }
+/* The question box: the same cap as Help's (site/help-head.html), so the two match on a wide screen. */
+.cta .home-ask { flex: 1 1 480px; min-width: 0; max-width: 480px; }
 
 .grid { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 .card { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }

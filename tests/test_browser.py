@@ -435,11 +435,12 @@ def test_download_urls_cover_every_choice(origin):
 
 
 def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
-    """Checks the home page shows Ask & Answer's box beside "Read the help" with no errors, that asking takes the reader to /help/#ask=<question>, that Help takes the question out of the address and shows the desk layout's panel with no text under 14 px and its heading kept only for screen readers, and that a build without Ask & Answer has no box. Covers js/ask.js, the pinned box() and the help layout under the deployed CSPs; the API refuses localhost, so no question is really asked."""
+    """Checks the home page shows Ask & Answer's box beside "Read the help" with no errors, that asking takes the reader to /help/#ask=<question>, that Help takes the question out of the address and shows the desk layout's panel with no text under 14 px, its heading kept only for screen readers and its question box the home page's width, and that a build without Ask & Answer has no box. Covers js/ask.js, the pinned box() and the help layout under the deployed CSPs; the API refuses localhost, so no question is really asked."""
     url, _ = origin_ask
     page, problems = open_page(browser, url, "/")
     box = page.locator("#ask-box.ask-box")
     box.wait_for(state="visible")
+    home_width = box.evaluate("e => Math.round(e.getBoundingClientRect().width)")
     assert box.locator("input").count() == 1 and box.locator("button").inner_text() == "Ask"
     assert page.locator('link[href="ask/ask-panel.css"]').count() == 1
     assert problems == []
@@ -457,5 +458,8 @@ def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
     assert px >= 14 - 0.05, f"help: {px}px at {where}"
     heading = page.locator(".ask-panel .ask-hd")
     assert heading.count() == 1 and heading.evaluate("e => e.getBoundingClientRect().height") <= 1
+    # Help's question box is the home page's width on a wide screen (design/v0/v0.5.4.md).
+    help_width = page.locator(".ask-panel .ask-askform").evaluate("e => Math.round(e.getBoundingClientRect().width)")
+    assert help_width == home_width == 480, (help_width, home_width)
     plain, _ = open_page(browser, origin, "/")
     assert plain.locator("#ask-box").count() == 0 and plain.locator('link[href="ask/ask-panel.css"]').count() == 0
