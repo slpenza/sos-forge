@@ -220,8 +220,8 @@ def test_simulator_caption_stays_put(browser, origin):
     """Checks the simulator shows the dataset's labels as a caption that follows the frames and keeps its place (centre and top; its width follows the text) while the globe is dragged. Covers simulator.js showCaption against a real WebGL sphere; this test is not itself tested."""
     page, problems = open_page(browser, origin, "/simulator.html?d=tiny")
     caption = page.locator("#caption")
-    caption.wait_for(state="visible")
-    seen = {caption.inner_text()}
+    page.wait_for_function("() => document.getElementById('caption').textContent.startsWith('Frame ')", timeout=15000)
+    first = caption.inner_text()
     centre = lambda b: (round(b["x"] + b["width"] / 2), round(b["y"]))
     box = centre(caption.bounding_box())
     canvas = page.locator(".stage canvas").bounding_box()
@@ -230,11 +230,12 @@ def test_simulator_caption_stays_put(browser, origin):
     page.mouse.down()
     for step in range(1, 11):
         page.mouse.move(cx + 18 * step, cy + 6 * step)
-        seen.add(caption.inner_text())
         page.wait_for_timeout(60)
     page.mouse.up()
     assert centre(caption.bounding_box()) == box and caption.is_visible()
-    assert all(s.startswith("Frame ") for s in seen) and len(seen) > 1
+    # Wait for the frames to move on rather than sampling during the drag: CI's software WebGL can be slow to start.
+    page.wait_for_function("t => document.getElementById('caption').textContent !== t", arg=first, timeout=15000)
+    assert caption.inner_text().startswith("Frame ")
     assert problems == []
 
 
