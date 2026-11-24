@@ -31,7 +31,7 @@ except ImportError:
     pytest.skip("Playwright is not installed (pip install -e '.[browser]')", allow_module_level=True)
 
 sys.path.insert(0, str(site.REPO_ROOT / "tools"))
-from smoke import download_urls, preview_paths, watch  # noqa: E402
+from smoke import download_urls, preview_paths, uncounted, watch  # noqa: E402
 
 CONFIG = '''[site]
 domain = "test.example"
@@ -507,6 +507,22 @@ def test_counts_views_and_downloads(browser, origin):
     page.wait_for_timeout(800)
     assert hits[-1] == {"kind": "view", "page": "simulator", "entry": False}
     assert page.context.cookies() == []
+    assert problems == []
+    page.close()
+
+
+def test_checks_are_not_counted(browser, origin):
+    """Checks a page the smoke check opens, with counting on, sends its view but has it answered in the browser, so it never reaches the counter and nothing fails. Covers tools/smoke.py uncounted; this test is not itself tested."""
+    page = browser.new_page()
+    problems = watch(page, origin)
+    uncounted(page)
+    page.route("**/config.json", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                     body=json.dumps({"askProjects": ["sos"], "count": True})))
+    answered = []
+    page.on("response", lambda r: answered.append(r.status) if r.url.endswith("/api/hit") else None)
+    page.goto(origin + "/", wait_until="networkidle")
+    page.wait_for_timeout(500)
+    assert answered == [204], "the view was sent, and answered in the browser"
     assert problems == []
     page.close()
 

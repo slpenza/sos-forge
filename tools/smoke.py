@@ -29,6 +29,11 @@ def watch(page, origin: str) -> list[str]:
     return problems
 
 
+def uncounted(page) -> None:
+    """Answer the page's anonymous counts (POST /api/hit, design/v0/v0.7.0.md) in the browser, so a check never counts as a visitor. Tested by tests/test_browser.py::test_checks_are_not_counted."""
+    page.route("**/api/hit", lambda route: route.fulfill(status=204))
+
+
 def download_urls(manifest: dict) -> list[str]:
     """Return every download a gallery offers: each dataset's own, and each length's in both text styles. Tested by tests/test_browser.py::test_download_urls_cover_every_choice."""
     urls = []
@@ -74,6 +79,7 @@ def main(argv: list[str]) -> int:
         for path in PAGES:
             page = browser.new_page()
             problems = watch(page, origin)
+            uncounted(page)
             page.goto(origin + path, wait_until="networkidle")
             page.wait_for_timeout(1500)
             failures += [f"{path}: {x}" for x in problems]
