@@ -4,7 +4,8 @@
 Run: python tools/smoke.py https://sos.stevenpenza.com
 
 Every page must load with no console errors, script errors, CSP violations or failed same-origin requests. Every
-download on every gallery card (each length, each text style) must answer. The release workflow runs this after
+download on every gallery card (each length, each text style) must answer, and so must every version's preview and
+labels on the site. The release workflow runs this after
 each deploy; tests/test_browser.py reuses watch() against a local build.
 """
 from __future__ import annotations
@@ -40,6 +41,16 @@ def download_urls(manifest: dict) -> list[str]:
     return sorted(set(urls))
 
 
+def preview_paths(manifest: dict) -> list[str]:
+    """Return the site paths of every version's browser preview and labels, the files the cards and the simulator play. Tested by tests/test_browser.py::test_download_urls_cover_every_choice."""
+    paths = []
+    for d in manifest.get("datasets", []):
+        for length in d.get("lengths", []):
+            for p in (length.get("previews") or {}).values():
+                paths += [x for x in (p.get("video"), p.get("labels")) if x]
+    return sorted(set(paths))
+
+
 def answers(url: str) -> bool:
     """Return whether a download answers with its first byte, following redirects. Exercised by the release workflow against GitHub; not unit tested."""
     req = urllib.request.Request(url, headers={"Range": "bytes=0-0", "User-Agent": "sos-forge-smoke"})
@@ -51,7 +62,7 @@ def answers(url: str) -> bool:
 
 
 def main(argv: list[str]) -> int:
-    """Load each page and check every download of a deployed site, printing what failed and returning non-zero if anything did. Exercised by the release workflow after each deploy; not unit tested."""
+    """Load each page and check every download and version preview of a deployed site, printing what failed and returning non-zero if anything did. Exercised by the release workflow after each deploy; not unit tested."""
     from playwright.sync_api import sync_playwright
     if len(argv) != 2:
         print(__doc__)
@@ -69,11 +80,14 @@ def main(argv: list[str]) -> int:
             page.close()
         browser.close()
     with urllib.request.urlopen(origin + "/datasets.json", timeout=60) as r:
-        urls = download_urls(json.load(r))
+        manifest = json.load(r)
+    urls, previews = download_urls(manifest), preview_paths(manifest)
     failures += [f"download does not answer: {u}" for u in urls if not answers(u)]
+    failures += [f"preview does not answer: {p}" for p in previews if not answers(f"{origin}/{p}")]
     for f in failures:
         print("FAIL", f)
-    print(f"{len(PAGES)} pages, {len(urls)} downloads: {'all good' if not failures else f'{len(failures)} problems'}")
+    print(f"{len(PAGES)} pages, {len(urls)} downloads, {len(previews)} preview files: "
+          f"{'all good' if not failures else f'{len(failures)} problems'}")
     return 1 if failures else 0
 
 

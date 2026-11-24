@@ -122,7 +122,7 @@ def cmd_check(args) -> int:
 
 
 def cmd_bundle(args) -> int:
-    """Zip a slug's built dataset folders for a GitHub Release upload. Tested by test_site.py::test_bundle_and_folder_dataset through bundle(); the CLI wrapper is exercised manually."""
+    """Zip a slug's built dataset folders, and a browser preview of each other version, for a GitHub Release upload. Tested by test_site.py::test_bundle_and_folder_dataset and test_version_previews through bundle(); the CLI wrapper is exercised manually."""
     from .site import bundle
     for z in bundle(args.slug, Path(args.dist)):
         print(z)
@@ -183,7 +183,7 @@ def parser() -> argparse.ArgumentParser:
             p.add_argument("--preset")
             p.add_argument("--frames-dir", help="also save every frame as PNG")
         p.set_defaults(fn=fn)
-    p = sub.add_parser("bundle", help="zip a dataset's built folders for a GitHub Release")
+    p = sub.add_parser("bundle", help="zip a dataset's built folders and version previews for a GitHub Release")
     p.add_argument("slug")
     p.add_argument("--dist", default="dist")
     p.set_defaults(fn=cmd_bundle)

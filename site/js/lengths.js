@@ -1,8 +1,6 @@
 // Movie lengths on the gallery cards: how a length and its pace (time per step: a year, a sport) read. Pure
 // functions, tested by lengths.test.mjs.
 
-const SHORT = { year: 'yr' };
-
 /**
  * Return a length as presenters say it, "40 s", "2 min" or "1 min 30 s", matching sosforge.package.length_label. Tested by lengths.test.mjs.
  */
@@ -26,11 +24,4 @@ function pace(seconds, per) {
  */
 export function paceLabel(seconds, per) {
   return per && seconds ? `${pace(seconds, per)} s a ${per.unit}` : '';
-}
-
-/**
- * Return a movie's pace for a chip, such as "0.2 s/yr" or "4 s/sport", or an empty string without a step. Tested by lengths.test.mjs.
- */
-export function paceShort(seconds, per) {
-  return per && seconds ? `${pace(seconds, per)} s/${SHORT[per.unit] || per.unit}` : '';
 }

@@ -9,6 +9,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -30,7 +31,7 @@ except ImportError:
     pytest.skip("Playwright is not installed (pip install -e '.[browser]')", allow_module_level=True)
 
 sys.path.insert(0, str(site.REPO_ROOT / "tools"))
-from smoke import download_urls, watch  # noqa: E402
+from smoke import download_urls, preview_paths, watch  # noqa: E402
 
 CONFIG = '''[site]
 domain = "test.example"
@@ -74,9 +75,12 @@ def deployed_csp(ask_origin: str = "", help_pages: bool = False) -> str:
 
 
 def build_fixture(tmp, config, **build):
-    """Build the fixture site (two tiny movies, one with an extra length, the labels style and a source, and a still) from a config. Helper; not itself tested."""
+    """Build the fixture site (two tiny movies, one with an extra length, the labels style, a version for each with its own labels, and a source, and a still) from a config. Helper; not itself tested."""
     dist = tmp / "dist"
     make_dataset(dist / "tiny_h264", name="Tiny (H.264)")
+    for folder, word in (("tiny_3s", "Three"), ("tiny_labels", "Label"), ("tiny_3s_labels", "Both")):
+        make_dataset(dist / folder, codec="mpeg4", name=folder)
+        (dist / folder / "labels.txt").write_text("".join(f"{word} {i}\n" for i in range(30)))
     with (dist / "tiny_h264" / "playlist.sos").open("a") as f:
         f.write("lastdwell = 3000\n")   # hold the last frame, as SOS does, so the caption's end state lasts long enough to see
     make_dataset(dist / "second_h264", name="Second (H.264)")
@@ -89,16 +93,32 @@ def build_fixture(tmp, config, **build):
 
 
 def serve(root, ask_origin=""):
-    """Serve a built site as CloudFront does, with the site CSP everywhere and the help one under /help/, returning (origin, server). Helper; not itself tested."""
+    """Serve a built site as CloudFront does, with the site CSP everywhere and the help one under /help/ and byte ranges so videos can seek, returning (origin, server). Helper; not itself tested."""
     policies = {False: deployed_csp(ask_origin), True: deployed_csp(ask_origin, help_pages=True)}
 
     class Handler(http.server.SimpleHTTPRequestHandler):
         """Serve the built site with CloudFront's CSPs and no request logging. Fixture helper; not itself tested."""
 
         def end_headers(self):
-            """Add the CSP CloudFront sends for this path. Fixture helper; not itself tested."""
+            """Add the CSP CloudFront sends for this path, and say byte ranges are served. Fixture helper; not itself tested."""
             self.send_header("Content-Security-Policy", policies[self.path.startswith("/help/")])
+            self.send_header("Accept-Ranges", "bytes")
             super().end_headers()
+
+        def do_GET(self):
+            """Serve the asked byte range as a 206, as CloudFront does (without it Chrome can't seek a video and jumps back to the start), or else the whole file. Fixture helper; not itself tested."""
+            rng = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
+            path = Path(self.translate_path(self.path))
+            if not rng or not path.is_file():
+                return super().do_GET()
+            data = path.read_bytes()
+            start, end = int(rng[1]), min(int(rng[2]) if rng[2] else len(data) - 1, len(data) - 1)
+            self.send_response(206)
+            self.send_header("Content-Type", self.guess_type(str(path)))
+            self.send_header("Content-Range", f"bytes {start}-{end}/{len(data)}")
+            self.send_header("Content-Length", str(end - start + 1))
+            self.end_headers()
+            self.wfile.write(data[start:end + 1])
 
         def log_message(self, *args):
             """Keep test output quiet. Fixture helper; not itself tested."""
@@ -177,32 +197,37 @@ def test_pages_load_clean(browser, origin, path):
 
 
 def test_gallery_cards_set_downloads(browser, origin):
-    """Checks the cards show dates, pace chips, the total, text styles and the Data line, that clicks and arrow keys set Download's link and wording, and that a single-length movie and a still keep their pills. Covers gallery.js card, chips and the pace wording; this test is not itself tested."""
+    """Checks the cards show date and length pills and the Data line, that the Length and Text selects set what Open in simulator opens and what Download fetches, and that a single-length movie and a still keep a plain Download link and no selects. Covers gallery.js card, versions.js versionPicker and the pace wording; this test is not itself tested."""
     page, problems = open_page(browser, origin, "/")
     cards = page.locator(".card")
     assert cards.count() == 3
     tiny, second, still = cards.nth(0), cards.nth(1), cards.nth(2)
-    dl = tiny.locator(".actions a.btn:not(.primary)")
-    assert tiny.locator(".badge.dates").inner_text() == "1 Jan - 2 Jan 2026"
-    assert tiny.locator(".pills .lengths span").all_inner_texts() == ["0.5 s/day", "1.5 s/day"]
-    assert tiny.locator(".pace").inner_text() == "1 s in all"
-    assert tiny.locator(".actions .lengths span").all_inner_texts() == ["Painted", "SOS labels"]
-    assert dl.inner_text() == "Download 1 s" and dl.get_attribute("href").endswith("/data-1/tiny_256x128.zip")
-    tiny.locator("label", has_text="1.5 s/day").click()
-    assert dl.inner_text() == "Download 3 s" and dl.get_attribute("href").endswith("/tiny_3s_256x128.zip")
-    tiny.locator("label", has_text="SOS labels").click()
-    assert dl.inner_text() == "Download 3 s, labels" and dl.get_attribute("href").endswith("/tiny_3s_labels_256x128.zip")
-    tiny.locator('.pills .lengths input:checked').press("ArrowLeft")
-    assert dl.inner_text() == "Download 1 s, labels" and dl.get_attribute("href").endswith("/tiny_labels_256x128.zip")
+    assert tiny.locator(".pills .badge").all_inner_texts() == ["1 Jan - 2 Jan 2026"]
     assert tiny.locator(".source").inner_text() == "Data: Test source"
     assert tiny.locator(".source a").get_attribute("href") == "https://example.com/source"
-    assert second.locator(".pills .badge").all_inner_texts() == ["1 s loop"] and second.locator(".lengths").count() == 0
-    assert still.locator(".pills .badge").all_inner_texts() == ["Still image"] and still.locator(".play").count() == 0
+    length, text = tiny.get_by_label("Length"), tiny.get_by_label("Text")
+    sim, dl = tiny.locator(".actions a.primary"), tiny.locator(".actions a.btn:not(.primary)")
+    assert length.locator("option").all_inner_texts() == ["1 s · 0.5 s a day", "3 s · 1.5 s a day"]
+    assert text.locator("option").all_inner_texts() == ["Painted on the globe", "SOS labels, fixed on screen"]
+    state = lambda: (sim.get_attribute("href"), dl.get_attribute("href").rsplit("/", 1)[1], dl.inner_text())
+    assert state() == ("simulator.html?d=tiny", "tiny_256x128.zip", "Download")
+    assert tiny.locator(".poster a").get_attribute("href") == "simulator.html?d=tiny"
+    length.select_option("3")
+    assert state() == ("simulator.html?d=tiny&s=3", "tiny_3s_256x128.zip", "Download")
+    text.select_option("labels")
+    assert state() == ("simulator.html?d=tiny&s=3&text=labels", "tiny_3s_labels_256x128.zip", "Download")
+    assert tiny.locator(".poster a").get_attribute("href") == "simulator.html?d=tiny&s=3&text=labels"
+    length.select_option("1")
+    assert state() == ("simulator.html?d=tiny&text=labels", "tiny_labels_256x128.zip", "Download")
+    for c, pills in ((second, ["1 s loop"]), (still, ["Still image"])):
+        assert c.locator(".pills .badge").all_inner_texts() == pills and c.locator("select").count() == 0
+        assert c.locator(".actions a.btn:not(.primary)").inner_text() == "Download"
+    assert still.locator(".play").count() == 0
     assert problems == []
 
 
 def test_flat_preview_plays_with_captions(browser, origin):
-    """Checks the play button swaps in a playing preview with its labels as captions pinned to the top, and starting another preview pauses the first. Covers gallery.js playFlat and addCaptions and captions.js in a real browser; this test is not itself tested."""
+    """Checks the play button swaps in a playing preview with its labels as captions pinned to the top, that changing the version while it plays swaps in that version's preview and labels, and starting another preview pauses the first. Covers gallery.js playFlat and addCaptions and captions.js in a real browser; this test is not itself tested."""
     page, problems = open_page(browser, origin, "/")
     cards = page.locator(".card")
     cards.nth(0).locator(".play").click()
@@ -212,6 +237,12 @@ def test_flat_preview_plays_with_captions(browser, origin):
                            " text: t.cues[0].text, active: [...t.activeCues].map(c => c.text) }; }")
     assert track["mode"] == "showing" and track["cues"] == 30 and track["line"] == 0 and track["text"] == "Frame 0"
     assert track["active"] and track["active"][0].startswith("Frame ")
+    cards.nth(0).get_by_label("Length").select_option("3")
+    cards.nth(0).get_by_label("Text").select_option("labels")
+    swapped = cards.nth(0).locator("video")
+    swapped.evaluate("v => new Promise(r => { const t = () => v.currentTime > 0.1 && v.textTracks[0]?.cues?.length ? r() : setTimeout(t, 50); t(); })")
+    assert swapped.evaluate("v => [new URL(v.src).pathname, v.textTracks[0].cues[0].text]") == ["/datasets/tiny/3s_labels/preview.mp4", "Both 0"]
+    first = swapped
     cards.nth(1).locator(".play").click()
     cards.nth(1).locator("video").evaluate("v => new Promise(r => { const t = () => v.currentTime > 0.2 ? r() : setTimeout(t, 50); t(); })")
     assert first.evaluate("v => v.paused")
@@ -249,13 +280,42 @@ def test_simulator_caption_stays_put(browser, origin):
     assert problems == []
 
 
+def test_simulator_switches_versions(browser, origin):
+    """Checks the simulator opens the version a card link names, shows the same Length and Text selects, and switching plays that version's preview and labels from the same place, recording it in the address; a dataset without versions hides the selects. Covers simulator.js playVersion and loadGallery with versions.js in a real browser; this test is not itself tested."""
+    page, problems = open_page(browser, origin, "/simulator.html?d=tiny&s=3")
+    caption = page.locator("#caption")
+    page.wait_for_function("() => document.getElementById('caption').textContent.startsWith('Three ')", timeout=15000)
+    length, text = page.locator("#versions").get_by_label("Length"), page.locator("#versions").get_by_label("Text")
+    assert length.input_value() == "3" and text.input_value() == "painted"
+    assert page.locator("#ds-downloads a").all_inner_texts() == ["tiny_3s_256x128.zip"]
+    page.locator("#play").click()                       # pause, so the place to keep is fixed
+    page.evaluate("() => { const s = document.getElementById('scrub'); s.value = String(s.max * 0.5); s.dispatchEvent(new Event('input')); }")
+    page.wait_for_function("() => document.getElementById('caption').textContent === 'Three 15'", timeout=15000)
+    text.select_option("labels")
+    page.wait_for_function("() => document.getElementById('caption').textContent === 'Both 15'", timeout=15000)
+    assert page.evaluate("() => location.search") == "?d=tiny&s=3&text=labels"
+    assert page.locator("#play").inner_text() == "Play" and caption.is_visible()
+    assert page.locator("#ds-downloads a").all_inner_texts() == ["tiny_3s_labels_256x128.zip"]
+    page.locator("#dataset").select_option("second")
+    page.wait_for_function("() => location.search === '?d=second'")
+    assert page.locator("#versions").is_hidden()
+    assert problems == []
+
+
 def test_download_urls_cover_every_choice(origin):
-    """Checks the smoke check's download list covers each dataset's own downloads and every length in both text styles. Covers tools/smoke.py download_urls; this test is not itself tested."""
+    """Checks the smoke check's lists cover each dataset's own downloads, every length in both text styles, and every version's preview and labels, all of which the built site serves. Covers tools/smoke.py download_urls and preview_paths; this test is not itself tested."""
     import urllib.request
     with urllib.request.urlopen(origin + "/datasets.json") as r:
-        names = [u.rsplit("/", 1)[1] for u in download_urls(json.load(r))]
+        manifest = json.load(r)
+    names = [u.rsplit("/", 1)[1] for u in download_urls(manifest)]
     assert names == sorted(["second_256x128.zip", "still_256x128.zip", "tiny_256x128.zip", "tiny_256x128_h264.zip",
                             "tiny_3s_256x128.zip", "tiny_3s_labels_256x128.zip", "tiny_labels_256x128.zip"])
+    paths = preview_paths(manifest)
+    assert paths == sorted([*(f"datasets/tiny/{v}{f}" for v in ("", "3s/", "labels/", "3s_labels/") for f in ("labels.txt", "preview.mp4")),
+                            "datasets/second/labels.txt", "datasets/second/preview.mp4"])
+    for p in paths:
+        with urllib.request.urlopen(f"{origin}/{p}") as r:
+            assert r.status == 200
 
 
 def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):

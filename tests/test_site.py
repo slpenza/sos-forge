@@ -63,7 +63,7 @@ def test_recipe_dates():
 
 
 def test_lengths_and_download_checks(tmp_path, monkeypatch):
-    """Checks lengths in site.toml are validated, named as sos bundle names them (extra lengths and the SOS-labels style as MPEG-4 only), listed shortest first with the preview's own length marked, and that a build checking downloads fails on a missing asset but only warns when a release can't be listed. Covers load_config lengths, per, label_style and sources, variant_name, variant_names, length_entries, missing_downloads, recipe_years and build_site's check with stubbed HTTP; this test is not itself tested."""
+    """Checks lengths in site.toml are validated, named as sos bundle names them (extra lengths and the SOS-labels style as MPEG-4 only, each with a _web.zip preview), listed shortest first with the preview's own length marked, and that a build checking downloads fails on a missing asset but only warns when a release can't be listed. Covers load_config lengths, per, label_style and sources, version_stem, version_stems, variant_name, variant_names, length_entries, missing_downloads, recipe_years and build_site's check with stubbed HTTP; this test is not itself tested."""
     head = '[site]\ndomain="d"\n[[datasets]]\nslug="gr"\nrelease="data-1"\npreview="gr_4k_h264.zip"\n'
     cfg = tmp_path / "s.toml"
     for body, msg in (('downloads=["gr_4k.zip"]\nlengths=[20, 20]\n', "distinct"), ('downloads=["gr_4k.zip"]\nlengths=[0]\n', "distinct"),
@@ -82,10 +82,14 @@ def test_lengths_and_download_checks(tmp_path, monkeypatch):
     styled = {**d, "label_style": True}
     assert [e["labels"]["label"] for e in site.length_entries(styled, "o/r", 40.4)] == [
         "gr_20s_labels_4k.zip", "gr_labels_4k.zip", "gr_120s_labels_4k.zip"]
-    held = {"gr_4k.zip", "gr_4k_h264.zip", "gr_20s_4k.zip", "gr_labels_4k.zip", "gr_20s_labels_4k.zip", "gr_120s_labels_4k.zip"}
+    assert site.version_stems(d) == ["gr_20s", "gr_120s"]
+    assert site.version_stems(styled) == ["gr_20s", "gr_120s", "gr_labels", "gr_20s_labels", "gr_120s_labels"]
+    held = {"gr_4k.zip", "gr_4k_h264.zip", "gr_20s_4k.zip", "gr_labels_4k.zip", "gr_20s_labels_4k.zip", "gr_120s_labels_4k.zip",
+            "gr_20s_web.zip", "gr_120s_web.zip", "gr_labels_web.zip", "gr_20s_labels_web.zip"}
     calls = []
     monkeypatch.setattr(site, "http_request", lambda url, **kw: (calls.append(url), json.dumps({"assets": [{"name": n} for n in held]}).encode())[1])
-    assert site.missing_downloads("o/r", [d, styled]) == ["data-1/gr_120s_4k.zip"] * 2 and len(calls) == 1
+    assert site.missing_downloads("o/r", [d, styled]) == ["data-1/gr_120s_4k.zip"] * 2 + ["data-1/gr_120s_labels_web.zip"]
+    assert len(calls) == 1
     with pytest.raises(RecipeError, match="gr_120s_4k.zip"):
         site.build_site(cfg, tmp_path / "out", check_downloads=True)
 
@@ -157,6 +161,64 @@ def test_bundle_and_folder_dataset(tmp_path):
         site.unzip_folder(evil, tmp_path / "y")
     with pytest.raises(RecipeError, match="no built folders"):
         site.bundle("missing", dist)
+
+
+def make_versions(dist: Path) -> None:
+    """Write a tiny dataset's default H.264 folder and its versions: 3 s (MPEG-4 and H.264), SOS labels and 3 s SOS labels (MPEG-4 only), each with its own labels. Test helper; not itself tested."""
+    make_dataset(dist / "tiny_h264", name="Tiny (H.264)")
+    for folder, codec, word in (("tiny_3s", "mpeg4", "Three"), ("tiny_3s_h264", "libx264", "Three"),
+                                ("tiny_labels", "mpeg4", "Label"), ("tiny_3s_labels", "mpeg4", "Both")):
+        make_dataset(dist / folder, codec=codec, name=folder)
+        (dist / folder / "labels.txt").write_text("".join(f"{word} {i}\n" for i in range(30)))
+
+
+def test_version_previews(tmp_path, monkeypatch):
+    """Checks sos bundle writes a browser preview zip per version (H.264 at the asked width, from the H.264 folder when there is one, else transcoded from MPEG-4, with its labels and playlist), and the site build publishes each version's preview and labels from those zips, from the built folders when a zip is missing, or from the release, refusing a preview browsers can't play. Covers web_bundle, bundle, version_preview, make_preview's poster and any_codec and build_site's previews; this test is not itself tested."""
+    dist = tmp_path / "dist"
+    make_versions(dist)
+    ff = find_ffmpeg()
+    webs = sorted(z.name for z in site.bundle("tiny", dist, web_width=128) if z.name.endswith("_web.zip"))
+    assert webs == ["tiny_3s_labels_web.zip", "tiny_3s_web.zip", "tiny_labels_web.zip"]
+    with zipfile.ZipFile(dist / "tiny_3s_web.zip") as z:
+        assert sorted(z.namelist()) == ["tiny_3s_web/labels.txt", "tiny_3s_web/playlist.sos", "tiny_3s_web/preview.mp4"]
+        assert "name = tiny_3s_h264" in z.read("tiny_3s_web/playlist.sos").decode()
+    labels = site.unzip_folder(dist / "tiny_labels_web.zip", tmp_path / "x")
+    info = site.media_info(labels / "preview.mp4", ff)
+    assert info["codec"] == "h264" and info["width"] == 128 and (labels / "labels.txt").read_text().startswith("Label 0\n")
+
+    cfg = tmp_path / "site.toml"
+    cfg.write_text('[site]\ndomain = "d"\n[[datasets]]\nslug = "tiny"\nrelease = "data-1"\npreview = "tiny_256x128_h264.zip"\n'
+                   'downloads = ["tiny_256x128.zip", "tiny_256x128_h264.zip"]\nlengths = [3]\nlabel_style = true\n')
+    (dist / "tiny_3s_labels_web.zip").unlink()          # this one comes from its built folder instead
+    out = tmp_path / "site"
+    entry = site.build_site(cfg, out, dist=dist, ask_base="")["datasets"][0]
+    one, three = entry["lengths"]
+    assert one["previews"]["painted"] == {"video": entry["preview"], "labels": entry["labels"]}
+    assert one["previews"]["labels"] == {"video": "datasets/tiny/labels/preview.mp4", "labels": "datasets/tiny/labels/labels.txt"}
+    assert three["previews"]["painted"]["video"] == "datasets/tiny/3s/preview.mp4"
+    for p, word in ((one["previews"]["labels"], "Label"), (three["previews"]["painted"], "Three"), (three["previews"]["labels"], "Both")):
+        assert (out / p["labels"]).read_text().startswith(f"{word} 0\n")
+        assert site.media_info(out / p["video"], ff)["codec"] == "h264"
+    assert site.media_info(out / three["previews"]["painted"]["video"], ff)["width"] == 128      # copied from its zip
+    assert site.media_info(out / three["previews"]["labels"]["video"], ff)["width"] == 256       # made from its folder
+
+    release = {z.name: z for z in dist.glob("*.zip")}
+    site.web_bundle(dist / "tiny_3s_labels", "tiny_3s_labels", dist, 128, ff)
+    release["tiny_3s_labels_web.zip"] = dist / "tiny_3s_labels_web.zip"
+    fetched = []
+    monkeypatch.setattr(site, "release_asset", lambda repo, tag, name: (fetched.append(name), release[name])[1])
+    site.build_site(cfg, tmp_path / "site2", ask_base="")
+    assert sorted(fetched) == ["tiny_256x128_h264.zip", "tiny_3s_labels_web.zip", "tiny_3s_web.zip", "tiny_labels_web.zip"]
+    assert (tmp_path / "site2" / "datasets" / "tiny" / "3s_labels" / "labels.txt").read_text().startswith("Both 0\n")
+
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    with zipfile.ZipFile(bad / "tiny_labels_web.zip", "w") as z:
+        z.write(dist / "tiny_labels" / "tiny_labels_256x128.mp4", "w/preview.mp4")
+        z.writestr("w/playlist.sos", "data = preview.mp4\n")
+    release["tiny_labels_web.zip"] = bad / "tiny_labels_web.zip"
+    with pytest.raises(RecipeError, match="not H.264"):
+        site.build_site(cfg, tmp_path / "site3", ask_base="")
 
 
 def test_release_assets_are_fetched_and_cached(monkeypatch):

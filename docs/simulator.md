@@ -8,6 +8,11 @@ frame rate, the hold on the first and last frames, auto-play, spin and tilt.
 
 Pick one from **Dataset**, or open it from a card on the front page.
 
+A movie published at several lengths, or with SOS labels as well as painted text, shows **Length** and **Text**
+under **Dataset**. A card's own **Length** and **Text** choices open that version. Switching keeps your place in the
+movie, so you can rehearse a presentation at the length you'll show, and the address names the version, so a link
+opens it again.
+
 | Control | What it does |
 |---|---|
 | Drag | Walk around the sphere |

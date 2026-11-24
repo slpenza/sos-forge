@@ -1,8 +1,10 @@
 // The SOS simulator page: plays a gallery dataset or a dropped dataset folder on a WebGL sphere, following the
-// playlist the way the sphere does (frame rate, first/last holds, auto-play, spin, tilt). Nothing is uploaded.
+// playlist the way the sphere does (frame rate, first/last holds, auto-play, spin, tilt). A gallery dataset with
+// several versions (lengths, painted text or SOS labels) can switch between them in place. Nothing is uploaded.
 import { Globe, attachControls } from './globe.js';
 import { parsePlaylist, parseLabels, playbackSettings, findDataFile } from './playlist.js';
 import { visitorView } from './sphere-math.js';
+import { pickVersion, simulatorHref, versionPicker } from './versions.js';
 
 const $ = (id) => document.getElementById(id);
 const ORBIT = { pitch: 12, distance: 3.2, fovDeg: 45 };
@@ -63,7 +65,7 @@ function describe(s, extra = {}) {
 }
 
 /**
- * Start a dataset from its playlist settings and a media URL, as a video or a still image. Tested in the browser with every gallery dataset and a dropped folder.
+ * Start a dataset from its playlist settings and a media URL, as a video or a still image; extra.at resumes a video that far through (a fraction) and extra.paused keeps it paused, for switching versions. Tested in the browser with every gallery dataset, a version switch and a dropped folder.
  */
 function start(settings, url, isVideo, sourceFps = 30, extra = {}) {
   unload();
@@ -91,7 +93,15 @@ function start(settings, url, isVideo, sourceFps = 30, extra = {}) {
   const v = document.createElement('video');
   v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
   v.playbackRate = settings.fps / sourceFps;
-  v.addEventListener('loadedmetadata', () => { $('scrub').max = String(v.duration || 0); v.playbackRate = settings.fps / sourceFps; });
+  v.addEventListener('loadedmetadata', () => {
+    $('scrub').max = String(v.duration || 0);
+    v.playbackRate = settings.fps / sourceFps;
+    if (extra.at > 0) {
+      v.currentTime = extra.at * v.duration;
+      state.phase = 'play';
+      if (!state.paused) v.play().catch(() => {});
+    }
+  });
   v.addEventListener('error', () => status(MPEG4_HINT));
   v.addEventListener('ended', () => { state.phase = 'last'; state.until = performance.now() + settings.lastDwellMs; });
   if ('requestVideoFrameCallback' in v) {
@@ -100,7 +110,7 @@ function start(settings, url, isVideo, sourceFps = 30, extra = {}) {
   }
   v.addEventListener('seeked', () => { state.dirty = true; });
   state.media = v;
-  state.paused = !settings.animate;
+  state.paused = extra.paused ?? !settings.animate;
   state.phase = 'first';
   state.until = performance.now() + settings.firstDwellMs;
   setPlayLabel();
@@ -181,30 +191,45 @@ async function openFiles(fileList) {
   start(settings, url, isVideo, 30, { labels });
   state.urls.push(url);
   $('dataset').value = '';
+  $('versions').replaceChildren();
+  $('versions').hidden = true;
   history.replaceState(null, '', location.pathname);
 }
 
 /**
- * Load the gallery manifest, fill the dataset picker and start the requested or first dataset. Tested in the browser against the built site.
+ * Play one version of a gallery dataset, recording it in the address; switching keeps the place in the movie (as a fraction, since lengths differ) and whether it was paused. Tested in the browser by test_browser.py::test_simulator_switches_versions.
+ */
+async function playVersion(d, v, keepPlace) {
+  history.replaceState(null, '', simulatorHref(d.slug, v).replace(/^simulator\.html/, ''));
+  const m = keepPlace && state.kind === 'movie' ? state.media : null;
+  const place = m && m.duration ? { at: m.currentTime / m.duration, paused: state.paused } : {};
+  let labels = [];
+  if (v.labels) { try { labels = parseLabels(await (await fetch(v.labels)).text()); } catch { labels = []; } }
+  start(playbackSettings(d.playlist), v.video, d.kind === 'movie', d.source_fps || 30,
+    { credits: d.credits, licences: d.licences, downloads: v.downloads, labels, ...place });
+}
+
+/**
+ * Load the gallery manifest, fill the dataset picker and start the requested or first dataset at the version the address names, showing the version selects for datasets that have them. Tested in the browser against the built site.
  */
 async function loadGallery() {
   let list = [];
   try { list = (await (await fetch('datasets.json')).json()).datasets || []; } catch { list = []; }
   const sel = $('dataset');
   sel.replaceChildren(new Option('Choose a dataset…', ''), ...list.map((d) => new Option(d.name, d.slug)));
-  const pick = async (slug) => {
+  const pick = (slug, seconds, style) => {
     const d = list.find((x) => x.slug === slug);
     if (!d) return;
     sel.value = d.slug;
-    history.replaceState(null, '', `?d=${encodeURIComponent(d.slug)}`);
-    let labels = [];
-    if (d.labels) { try { labels = parseLabels(await (await fetch(d.labels)).text()); } catch { labels = []; } }
-    start(playbackSettings(d.playlist), d.preview, d.kind === 'movie', d.source_fps || 30,
-      { credits: d.credits, licences: d.licences, downloads: d.downloads, labels });
+    const v = pickVersion(d, seconds, style);
+    const picker = versionPicker(d, v, (next) => playVersion(d, next, true), 'sim');
+    $('versions').replaceChildren(...(picker ? [picker] : []));
+    $('versions').hidden = !picker;
+    playVersion(d, v, false);
   };
   sel.addEventListener('change', () => pick(sel.value));
-  const want = new URLSearchParams(location.search).get('d');
-  if (want || list.length) pick(want || list[0].slug);
+  const q = new URLSearchParams(location.search);
+  if (q.get('d') || list.length) pick(q.get('d') || list[0].slug, q.get('s'), q.get('text'));
   else { describe(playbackSettings({ name: 'No datasets yet' })); status('Drop a dataset folder here, or use Open folder.'); }
 }
 

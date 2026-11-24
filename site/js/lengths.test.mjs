@@ -1,7 +1,7 @@
 // Tests for the gallery's length and pace labels. Run: node --test site/js/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { lengthLabel, paceLabel, paceShort } from './lengths.js';
+import { lengthLabel, paceLabel } from './lengths.js';
 
 const YEARS = (count) => ({ unit: 'year', count });
 const SPORTS = { unit: 'sport', count: 9 };
@@ -19,10 +19,4 @@ test('pace reads per step with one significant figure under a second, two up to 
   assert.equal(paceLabel(36, SPORTS), '4 s a sport');
   assert.equal(paceLabel(600, YEARS(20)), '30 s a year');
   assert.equal(paceLabel(36, null), '');
-});
-
-test('chips abbreviate year and keep other steps whole', () => {
-  assert.equal(paceShort(55, YEARS(55)), '1 s/yr');
-  assert.equal(paceShort(72, SPORTS), '8 s/sport');
-  assert.equal(paceShort(40, null), '');
 });

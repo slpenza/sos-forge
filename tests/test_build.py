@@ -141,7 +141,8 @@ def test_length_variant_build(tmp_path):
     assert "labelvisible = true" in lp and "labelvisible = false" in primary
     assert "SOS draws it from `labels.txt`" in (tmp_path / "dist" / "tiny_movie_1s_labels" / "README.md").read_text()
     assert sorted(z.name for z in bundle("tiny_movie", tmp_path / "dist")) == [
-        "tiny_movie_1s_256x128.zip", "tiny_movie_1s_256x128_h264.zip", "tiny_movie_1s_labels_256x128.zip"]
+        "tiny_movie_1s_256x128.zip", "tiny_movie_1s_256x128_h264.zip", "tiny_movie_1s_labels_256x128.zip",
+        "tiny_movie_1s_labels_web.zip", "tiny_movie_1s_web.zip"]
     r = load_recipe(d)
     same = BuildOptions(build_dir=tmp_path / "b", seconds=1, fps=6)
     assert length_tag(r, make_context(r, same), same) is None

@@ -67,17 +67,13 @@ main.narrow { max-width: 860px; }
 .card p.source a { color: var(--muted); text-decoration-color: var(--rule); }
 .card p.source a:hover { color: var(--accent); }
 .pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.lengths { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; }
-.lengths label { position: relative; cursor: pointer; }
-.lengths input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
-.lengths span { display: block; padding: 1px 9px; font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.lengths label + label span { border-left: 1px solid var(--rule); }
-.lengths input:checked + span { background: var(--accent-soft); color: var(--accent); }
-.lengths input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pace { font-size: .78rem; color: var(--faint); }
-.badge { align-self: flex-start; font-size: .78rem; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; }
-.badge.dates { color: var(--fg); background: var(--panel-2); border: 1px solid var(--rule); padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.badge { font-size: .78rem; color: var(--muted); border: 1px solid var(--rule); padding: 1px 9px; border-radius: 999px;
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.versions { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 12px; }
+.versions label { font-size: .85rem; color: var(--faint); }
+.versions select { width: 100%; min-width: 0; font: inherit; font-size: .92rem; color: var(--fg); background: var(--panel-2);
+  border: 1px solid var(--rule); border-radius: 8px; padding: 6px 8px; font-variant-numeric: tabular-nums; }
 .foot { color: var(--faint); font-size: .85rem; padding: var(--gap); border-top: 1px solid var(--rule); max-width: 1280px; margin: var(--gap) auto 0; }
 
 /* Simulator */

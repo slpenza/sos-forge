@@ -22,7 +22,7 @@ sos build coffee_shops                     # 4096x2048 -> dist/coffee_shops/
 sos still lunar_phases 180 --preview       # one PNG for a quick look
 sos check where_the_world_plays            # fetch data + run checks, no rendering
 sos build getting_richer --seconds 120     # another length -> dist/getting_richer_120s/
-sos bundle where_the_world_plays           # zip every built folder and length for a GitHub Release
+sos bundle where_the_world_plays           # zip every built folder, length and browser preview for a Release
 sos site --dist dist --serve               # gallery + simulator + help at http://localhost:8040/
 ```
 
@@ -32,11 +32,12 @@ README has the exact commands and checksums).
 ## The site and the simulator
 
 `sos site` builds the site behind sos.stevenpenza.com:
-- a gallery of the published datasets, each card showing its date range and length, and each movie with a play
-  button for its flat preview
+- a gallery of the published datasets, each card showing its date range, and each movie with a play button for its
+  flat preview. Movies with several lengths or text styles have **Length** and **Text** selects, which set what the
+  preview plays, what the simulator opens and what Download fetches
 - a **simulator** that plays a dataset on a virtual 6-foot sphere in the browser, following its `playlist.sos`
-  (frame rate, holds, spin, tilt). It has Orbit and Visitor views and a fixed caption, and you can drop in a
-  dataset folder of your own; nothing is uploaded.
+  (frame rate, holds, spin, tilt). It has Orbit and Visitor views, a fixed caption and the same Length and Text
+  selects, and you can drop in a dataset folder of your own; nothing is uploaded.
 - the help, built by Ask & Answer, with its question box first, and an ask box on the home page that takes a
   question there. The release is pinned in `ask.lock.json` and fetched from `site/site.toml`'s `ask_base`, each
   file checked against the lock. `sos site --no-ask` builds without it (a fork, say): the gallery and simulator stay,
@@ -142,8 +143,10 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
 - **Rendered datasets go on a data release first**, so the version's site deploy can download them:
   `sos bundle <slug>`, then `gh release create data-YYYY-MM <zips>`, then list them in `site/site.toml`. A
   `data-*` tag deploys nothing. Extra lengths are built with `sos build <slug> --seconds N`, bundled by the same
-  `sos bundle`, and listed as `lengths = [N, ...]`. `sos site` refuses to deploy a download, or a length, that its
-  release doesn't hold.
+  `sos bundle`, and listed as `lengths = [N, ...]`. For every length and text style other than the standard one,
+  `sos bundle` also writes `<version>_web.zip`: a 2048-wide H.264 preview with its `labels.txt`, which the cards and
+  the simulator play. Upload those too. `sos site` refuses to deploy a download, length or preview that its release
+  doesn't hold.
 - **Moving to another Ask & Answer release** is deliberate, never part of a build: take `corpus.py` from the API's
   `artifacts.base`, check it against the integrity `GET /ask` lists, run
   `python3 corpus.py --project . --lock <ask_base>`, and commit the new `ask.lock.json` with the version that moves.

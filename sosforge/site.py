@@ -125,8 +125,23 @@ def load_config(path: Path) -> dict:
     return cfg
 
 
-def bundle(slug: str, dist: Path) -> list[Path]:
-    """Zip every built folder for a slug (dist/<slug>, dist/<slug>_<codec>, and the length variants dist/<slug>_<N>s[_<codec>]) as dist/<folder>_<size>[_<codec>].zip for a release. Tested by test_site.py::test_bundle_and_folder_dataset and test_build.py::test_length_variant_build."""
+def web_bundle(folder: Path, stem: str, dist: Path, width: int, ffmpeg: str) -> Path:
+    """Zip a version's browser preview (preview.mp4, H.264 at most `width` wide) with its labels.txt and playlist.sos as dist/<stem>_web.zip, so the site can publish it without fetching the 4K movie. Tested by test_site.py::test_version_previews."""
+    pl = parse_playlist((folder / "playlist.sos").read_text())
+    zpath = Path(dist) / f"{stem}_web.zip"
+    with tempfile.TemporaryDirectory() as tmp:
+        make_preview(folder / str(pl.get("data", "")), Path(tmp), width, ffmpeg, poster=False, any_codec=True)
+        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_STORED) as z:
+            z.write(Path(tmp) / "preview.mp4", f"{stem}_web/preview.mp4")
+            for name in ("labels.txt", "playlist.sos"):
+                if (folder / name).exists():
+                    z.write(folder / name, f"{stem}_web/{name}")
+    LOG.info("bundled %s (%.1f MB)", zpath.name, zpath.stat().st_size / 1e6)
+    return zpath
+
+
+def bundle(slug: str, dist: Path, web_width: int = 2048) -> list[Path]:
+    """Zip every built folder for a slug (dist/<slug>, dist/<slug>_<codec>, and the length and style variants dist/<slug>_<N>s[_labels][_<codec>]) as dist/<folder>_<size>[_<codec>].zip for a release, plus each variant's browser preview as dist/<variant>_web.zip, made from its H.264 folder when there is one. Tested by test_site.py::test_bundle_and_folder_dataset, test_version_previews and test_build.py::test_length_variant_build."""
     dist = Path(dist)
     folders = sorted(p for p in dist.glob(f"{slug}*") if p.is_dir() and (p / "playlist.sos").exists()
                      and re.fullmatch(rf"{re.escape(slug)}(_\d+s)?(_(labels|panels))?(_(h264|mpeg4))?", p.name))
@@ -147,6 +162,11 @@ def bundle(slug: str, dist: Path) -> list[Path]:
                     z.write(f, f"{folder.name}/{f.name}")
         LOG.info("bundled %s (%.1f MB)", zpath.name, zpath.stat().st_size / 1e6)
         out.append(zpath)
+    stems = sorted({re.sub(r"_(h264|mpeg4)$", "", f.name) for f in folders} - {slug})
+    ffmpeg = find_ffmpeg() if stems else ""
+    for stem in stems:
+        source = next(p for p in (dist / f"{stem}_h264", dist / stem, dist / f"{stem}_mpeg4") if p in folders)
+        out.append(web_bundle(source, stem, dist, web_width, ffmpeg))
     return out
 
 
@@ -179,8 +199,10 @@ def release_asset(repo: str, tag: str, name: str) -> Path:
 
 
 def unzip_folder(zpath: Path, into: Path) -> Path:
-    """Extract a dataset zip safely (no absolute or parent paths) and return the folder holding playlist.sos. Tested by test_site.py::test_bundle_and_folder_dataset."""
-    into.mkdir(parents=True, exist_ok=True)
+    """Extract a dataset zip safely (no absolute or parent paths) into a cleared folder, so nothing from an earlier zip is picked up, and return the folder holding playlist.sos. Tested by test_site.py::test_bundle_and_folder_dataset and test_version_previews."""
+    if into.exists():
+        shutil.rmtree(into)
+    into.mkdir(parents=True)
     with zipfile.ZipFile(zpath) as z:
         for member in z.namelist():
             if member.startswith("/") or ".." in Path(member).parts:
@@ -208,8 +230,8 @@ def media_info(path: Path, ffmpeg: str) -> dict:
     return info
 
 
-def make_preview(src: Path, out_dir: Path, width: int, ffmpeg: str) -> dict:
-    """Write a browser preview (H.264 MP4 or JPEG, at most `width` wide) and a poster JPEG, returning their names and the source facts. Tested by test_site.py::test_bundle_and_folder_dataset."""
+def make_preview(src: Path, out_dir: Path, width: int, ffmpeg: str, *, poster: bool = True, any_codec: bool = False) -> dict:
+    """Write a browser preview (H.264 MP4 or JPEG, at most `width` wide) and a poster JPEG unless told not to, returning their names and the source facts; any_codec lets a version's MPEG-4-only folder through. Tested by test_site.py::test_bundle_and_folder_dataset and test_version_previews."""
     out_dir.mkdir(parents=True, exist_ok=True)
     info = media_info(src, ffmpeg)
     w = min(width, info.get("width") or width)
@@ -218,10 +240,12 @@ def make_preview(src: Path, out_dir: Path, width: int, ffmpeg: str) -> dict:
     is_video = src.suffix.lower() in (".mp4", ".m4v", ".mov", ".webm")
     run = lambda args: subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", *args], check=True)  # noqa: E731
     if is_video:
-        if info.get("codec") not in (None, "h264"):
+        if info.get("codec") not in (None, "h264") and not any_codec:
             raise RecipeError(f"{src.name} is {info.get('codec')}; previews need the H.264 folder (…_h264) because browsers can't play it")
         run(["-i", str(src), "-an", "-vf", f"{scale},format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-crf", "24",
              "-profile:v", "main", "-movflags", "+faststart", str(out_dir / "preview.mp4")])
+        if not poster:
+            return {"preview": "preview.mp4", **info}
         at = max(0.0, info.get("duration_s", 0) / 3)
         run(["-ss", f"{at:.2f}", "-i", str(src), "-frames:v", "1", "-vf", "scale=1280:640:flags=lanczos", "-q:v", "3",
              str(out_dir / "poster.jpg")])
@@ -262,18 +286,31 @@ def recipe_years(slug: str, recipes: Path = REPO_ROOT / "recipes") -> float | No
     return round(years, 2) if years >= 2 else None
 
 
+def version_stem(slug: str, seconds: int | None = None, style: str | None = None) -> str:
+    """Return the folder name sos build gives a version of a dataset: getting_richer, getting_richer_120s, getting_richer_labels or getting_richer_120s_labels. Tested by test_site.py::test_lengths_and_download_checks."""
+    return f"{slug}{f'_{seconds}s' if seconds else ''}{f'_{style}' if style else ''}"
+
+
 def variant_name(name: str, slug: str, seconds: int | None = None, style: str | None = None) -> str:
     """Return a release asset's name for a length or text-style variant as sos bundle names it: getting_richer_4k.zip becomes getting_richer_120s_4k.zip, getting_richer_labels_4k.zip or getting_richer_120s_labels_4k.zip. Tested by test_site.py::test_lengths_and_download_checks."""
-    return f"{slug}{f'_{seconds}s' if seconds else ''}{f'_{style}' if style else ''}_{name[len(slug) + 1:]}"
+    return f"{version_stem(slug, seconds, style)}_{name[len(slug) + 1:]}"
+
+
+def version_stems(d: dict) -> list[str]:
+    """Return the folder names of a dataset's versions other than its own: each extra length, then the SOS-labels style at every length when the dataset offers it. Tested by test_site.py::test_lengths_and_download_checks."""
+    stems = [version_stem(d["slug"], s) for s in d["lengths"]]
+    if d["label_style"]:
+        stems += [version_stem(d["slug"], s, "labels") for s in [None, *d["lengths"]]]
+    return stems
 
 
 def variant_names(d: dict) -> list[str]:
-    """Return the release assets a dataset's extra lengths and SOS-labels style need: MPEG-4 only (the first download), since the standard length's H.264 zip already serves previews and codec tests. Tested by test_site.py::test_lengths_and_download_checks."""
+    """Return the release assets a dataset's other versions need: each one's MPEG-4 zip (the first download), since the standard length's H.264 zip already serves codec tests, and its browser preview zip (<stem>_web.zip). Tested by test_site.py::test_lengths_and_download_checks."""
     first = d["downloads"][0]
     names = [variant_name(first, d["slug"], s) for s in d["lengths"]]
     if d["label_style"]:
         names += [variant_name(first, d["slug"], s, "labels") for s in [None, *d["lengths"]]]
-    return names
+    return names + [f"{stem}_web.zip" for stem in version_stems(d)]
 
 
 def length_entries(d: dict, repo: str, duration_s: float) -> list[dict]:
@@ -336,6 +373,33 @@ def dataset_entry(folder: Path, slug: str, out: Path, width: int, ffmpeg: str, d
             "source_fps": facts.get("fps", pl.get("fps", 30)), "duration_s": facts.get("duration_s", 0),
             "width": facts.get("width"), "height": facts.get("height"), "credits": lists["credits"],
             "licences": lists["licences"], "downloads": downloads, "labels": labels, "dates": dates}
+
+
+def version_preview(stem: str, slug: str, out: Path, *, dist: Path | None, repo: str, release: str, width: int,
+                    ffmpeg: str, work: Path) -> dict:
+    """Publish one version's browser preview and labels under datasets/<slug>/<tag>/, from dist (its _web.zip, else its built folder, H.264 preferred) or else its _web.zip on the release, returning their site paths. Tested by test_site.py::test_version_previews."""
+    tag = stem[len(slug) + 1:]
+    target = out / "datasets" / slug / tag
+    target.mkdir(parents=True, exist_ok=True)
+    web = Path(dist) / f"{stem}_web.zip" if dist else None
+    built = next((p for p in (Path(dist) / f"{stem}_h264", Path(dist) / stem) if p.is_dir()), None) if dist else None
+    if web and web.is_file():
+        folder = unzip_folder(web, work / f"{stem}_web")
+    elif built:
+        folder = built
+        pl = parse_playlist((folder / "playlist.sos").read_text())
+        make_preview(folder / str(pl.get("data", "")), target, width, ffmpeg, poster=False, any_codec=True)
+    else:
+        folder = unzip_folder(release_asset(repo, release, f"{stem}_web.zip"), work / f"{stem}_web")
+    if not (target / "preview.mp4").exists():
+        if media_info(folder / "preview.mp4", ffmpeg).get("codec") != "h264":
+            raise RecipeError(f"{stem}_web.zip: preview.mp4 is not H.264, so browsers can't play it")
+        shutil.copy2(folder / "preview.mp4", target / "preview.mp4")
+    labels = None
+    if (folder / "labels.txt").exists():
+        shutil.copy2(folder / "labels.txt", target / "labels.txt")
+        labels = f"datasets/{slug}/{tag}/labels.txt"
+    return {"video": f"datasets/{slug}/{tag}/preview.mp4", "labels": labels}
 
 
 def ask_lock(path: Path | None = None) -> dict:
@@ -441,6 +505,13 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ba
         entry = dataset_entry(folder, d["slug"], out, cfg["preview_width"], ffmpeg, downloads,
                               d.get("dates") or recipe_dates(d["slug"]))
         entry["lengths"] = length_entries(d, cfg["repo"], entry["duration_s"]) if entry["kind"] == "movie" and d["release"] else []
+        for e in entry["lengths"]:
+            e["previews"] = {"painted": {"video": entry["preview"], "labels": entry["labels"]}} if e["default"] else {}
+            for style in ("painted", "labels") if d["label_style"] else ("painted",):
+                if style not in e["previews"]:
+                    stem = version_stem(d["slug"], None if e["default"] else e["seconds"], "labels" if style == "labels" else None)
+                    e["previews"][style] = version_preview(stem, d["slug"], out, dist=dist, repo=cfg["repo"], release=d["release"],
+                                                           width=cfg["preview_width"], ffmpeg=ffmpeg, work=work)
         entry["sources"] = d["sources"]
         years = recipe_years(d["slug"])
         entry["per"] = d.get("per") or ({"unit": "year", "count": years} if years else None)
