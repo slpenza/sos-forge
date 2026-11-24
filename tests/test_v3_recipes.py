@@ -12,7 +12,7 @@ from sosforge.recipe import load_recipe
 RECIPES = Path(__file__).resolve().parents[1] / "recipes"
 
 
-@pytest.mark.parametrize("slug", ["tonight_aurora", "getting_richer", "cities_growing"])
+@pytest.mark.parametrize("slug", ["aurora_forecast", "getting_richer", "cities_growing"])
 def test_demo_recipes_validate(slug, tmp_path):
     """Checks each v0.3.0 demo recipe loads, validates its keys and builds its layers without touching the network. Covers the recipe files; their data downloads are exercised by real builds."""
     r = load_recipe(RECIPES / slug)

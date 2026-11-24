@@ -27,7 +27,7 @@ sos build lunar_phases --preview          # a quick 1024 × 512 version, about 1
 `--preview` builds small and fast, so you can check a dataset before spending minutes on the full 4096 × 2048
 version. The result lands in `dist/lunar_phases_preview/`.
 
-Other bundled datasets show the other kinds of data sos-forge handles: `tonight_aurora` (a live forecast grid),
+Other bundled datasets show the other kinds of data sos-forge handles: `aurora_forecast` (a live forecast grid),
 `getting_richer` (countries shaded year by year) and `cities_growing` (points that grow).
 
 To look at a single moment without building a video, render one frame as a picture:

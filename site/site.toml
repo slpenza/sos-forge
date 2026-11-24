@@ -83,9 +83,9 @@ preview = "lunar_phases_4k_h264.zip"
 downloads = ["lunar_phases_4k.zip", "lunar_phases_4k_h264.zip"]
 
 [[datasets]]
-slug = "tonight_aurora"
+slug = "aurora_forecast"
 sources = [{ label = "NOAA Space Weather Prediction Center, OVATION", url = "https://www.swpc.noaa.gov/products/aurora-30-minute-forecast" }]
 release = "data-2026-11"
-preview = "tonight_aurora_4k.zip"                # a still image, so one zip serves both
-downloads = ["tonight_aurora_4k.zip"]
-dates = "23 Nov 2026, 02:06 UTC"               # the forecast time of this build; movies take theirs from the recipe
+preview = "aurora_forecast_4k.zip"               # a still image, so one zip serves both
+downloads = ["aurora_forecast_4k.zip"]
+dates = "Forecast for 18:52 UTC"               # this build's forecast time; its date is in the name, so isn't repeated

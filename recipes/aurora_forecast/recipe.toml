@@ -1,9 +1,10 @@
-# Tonight's Aurora: NOAA's OVATION forecast of where the northern and southern lights may be overhead in the next hour,
+# Aurora Forecast: NOAA's OVATION forecast of where the northern and southern lights may be overhead in the next hour,
 # drawn over the real day and night at build time. Rebuild for a fresh forecast; the feed is cached for 30 minutes.
+# The name carries the forecast's date, so a build stays true after the night it shows.
 
 [dataset]
-name = "Tonight's Aurora"
-slug = "tonight_aurora"
+name = "Aurora Forecast, {forecast_time.day} {forecast_time:%b %Y}"
+slug = "aurora_forecast"
 description = "NOAA's short-term forecast of the chance of seeing an aurora overhead, drawn on Earth as the Sun lit it when this image was made. The ovals sit around the magnetic poles and swell during geomagnetic storms."
 output = "texture"
 width = 4096

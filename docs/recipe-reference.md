@@ -13,7 +13,7 @@ Unknown keys are errors, and the error suggests the closest valid key.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `name` | required | Playlist name shown to presenters |
+| `name` | required | Playlist name shown to presenters. It can name build values as HUD templates do, such as `{forecast_time:%b %Y}`, filled from the first frame; it then needs a `slug` |
 | `slug` | from name | Folder name in `dist/` and on the SOS machine |
 | `stem` | slug | Data file stem; the size tag is appended (e.g. `moon_phases_4k.mp4`) |
 | `description` | `""` | One or two sentences; credits are appended automatically |

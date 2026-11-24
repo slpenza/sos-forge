@@ -7,6 +7,7 @@ import contextlib
 import logging
 import multiprocessing as mp
 import os
+import string
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
@@ -137,6 +138,17 @@ def prepare_layers(ctx: BuildContext, layers: list) -> None:
         layer.attach()
 
 
+def dataset_name(template: str, values: dict) -> str:
+    """Return a dataset's name with any {value} it names filled from a frame's values, as HUD templates are (such as a forecast's date), or the name as written when it names none. Tested by test_build.py::test_name_takes_build_values."""
+    if "{" not in template:
+        return template
+    try:
+        return string.Formatter().vformat(template, (), {k: v for k, v in values.items() if k != "name"})
+    except (KeyError, AttributeError, IndexError, ValueError) as exc:
+        raise RecipeError(f"[dataset] name {template!r} can't be filled ({type(exc).__name__}: {exc}); available "
+                          f"values are: {', '.join(sorted(k for k in values if k != 'name'))}") from None
+
+
 class FrameRenderer:
     """Composites all layers and the HUD for one frame index. Tested indirectly by test_build.py."""
 
@@ -152,7 +164,7 @@ class FrameRenderer:
             self.hud = HudRenderer(ctx.width, ctx.height, spec, [self.values(ctx.timeline.at(i)) for i in idx])
 
     def values(self, t) -> dict:
-        """Merge timeline, layer and recipe-hook values for HUD templates, passing a three-argument hook the values so far. Tested by test_recipe.py::test_hook_registers_layer_and_values and test_v3_recipes.py::test_hook_sees_layer_values."""
+        """Merge timeline, layer and recipe-hook values for HUD templates, passing a three-argument hook the values so far, then fill the dataset's name from them. Tested by test_recipe.py::test_hook_registers_layer_and_values, test_v3_recipes.py::test_hook_sees_layer_values and test_build.py::test_name_takes_build_values."""
         v = {"name": self.ctx.recipe.dataset["name"], **t.values()}
         for layer in self.layers:
             v.update(layer.values(t))
@@ -161,6 +173,7 @@ class FrameRenderer:
             import inspect
             wants_values = len(inspect.signature(hook).parameters) >= 3
             v.update((hook(t, self.ctx, dict(v)) if wants_values else hook(t, self.ctx)) or {})
+        v["name"] = dataset_name(self.ctx.recipe.dataset["name"], v)   # last, so it can use the hook's values too
         return v
 
     def label(self, index: int) -> str:
@@ -302,6 +315,8 @@ def build(ref, opts: BuildOptions | None = None) -> dict:
     layers = make_layers(ctx)
     prepare_layers(ctx, layers)
     renderer = FrameRenderer(ctx, layers)
+    # A name may take build values, such as a forecast's date: the playlist and README get it filled from frame one.
+    recipe.dataset["name"] = renderer.values(ctx.timeline.at(0))["name"]
     first = renderer.frame(0)
     checks = collect_checks(ctx, layers, first)
     log_checks(checks, LOG)

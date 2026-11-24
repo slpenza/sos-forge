@@ -154,6 +154,8 @@ def load_recipe(ref: str | Path) -> Recipe:
         raise RecipeError(f"{path}: invalid TOML: {exc}") from exc
     check_keys("recipe", raw, TOP_KEYS)
     dataset = with_defaults("dataset", raw.get("dataset", {}), DATASET_KEYS)
+    if "{" in str(dataset["name"]) and not dataset["slug"]:
+        raise RecipeError("[dataset] a name that takes build values, like {forecast_time:%d %b %Y}, needs a slug")
     dataset["slug"] = dataset["slug"] or slugify(dataset["name"])
     dataset["stem"] = dataset["stem"] or dataset["slug"]
     if dataset["output"] not in ("texture", "movie"):

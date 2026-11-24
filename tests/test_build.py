@@ -81,6 +81,24 @@ def test_texture_build_end_to_end(tmp_path):
     assert "data = tiny_texture_256x128.jpg" in pl and "fps" not in pl and "Credits: Test credit; My GPS" in pl
 
 
+def test_name_takes_build_values(tmp_path):
+    """Checks a dataset name can name build values as HUD templates do, filled from the first frame into the playlist and README, that one naming a missing value fails naming the ones available, and that such a name needs a slug. Covers dataset_name, FrameRenderer.values, build and load_recipe; which values a real source supplies is tested with each source."""
+    hook = "from datetime import datetime\n\ndef values(t, ctx):\n    return {'when': datetime(2026, 12, 5, 2, 6)}\n"
+    named = TEXTURE.replace('name = "Tiny Texture"', 'name = "Tiny, {when.day} {when:%b %Y}"\nslug = "tiny_texture"')
+    d = make(tmp_path, named)
+    (d / "recipe.py").write_text(hook)
+    build(d, BuildOptions(out_dir=tmp_path / "dist", build_dir=tmp_path / "b", workers=1))
+    folder = tmp_path / "dist" / "tiny_texture"
+    assert "name = Tiny, 5 Dec 2026\n" in (folder / "playlist.sos").read_text()
+    assert (folder / "README.md").read_text().startswith("# Tiny, 5 Dec 2026\n")
+    (d / "recipe.toml").write_text(named.replace("{when.day}", "{whenever.day}"))
+    with pytest.raises(RecipeError, match=r"\[dataset\] name .*available values are: .*when"):
+        build(d, BuildOptions(out_dir=tmp_path / "dist", build_dir=tmp_path / "b", workers=1))
+    (d / "recipe.toml").write_text(named.replace('slug = "tiny_texture"\n', ""))
+    with pytest.raises(RecipeError, match="needs a slug"):
+        load_recipe(d)
+
+
 def test_movie_build_end_to_end(tmp_path):
     """Checks a timed movie renders once in spawned workers into MPEG-4 (primary) and H.264 (variant folder), both validate, a single-codec override works, and a still renders. Covers encode_movie, build packaging of variants, _init_worker, _render_task, probe_video, validate_video and still; this test is not itself tested."""
     d = make(tmp_path, MOVIE)
