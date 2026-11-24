@@ -50,6 +50,6 @@ test('unknown lengths and styles fall back to the default; a dataset without len
 });
 
 test('length options show the pace when the dataset has a step', () => {
-  assert.equal(lengthOption(101, { unit: 'year', count: 202 }), '1 min 41 s · 0.5 s a year');
+  assert.equal(lengthOption(101, { unit: 'year', count: 202 }), '1 min 41 s · 0.5 s/year');
   assert.equal(lengthOption(36, null), '36 s');
 });

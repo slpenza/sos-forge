@@ -12,11 +12,11 @@ test('lengths read as seconds, whole minutes, or minutes and seconds, like lengt
 });
 
 test('pace reads per step with one significant figure under a second, two up to ten, whole above', () => {
-  assert.equal(paceLabel(40, YEARS(202)), '0.2 s a year');
-  assert.equal(paceLabel(20, YEARS(202)), '0.1 s a year');
-  assert.equal(paceLabel(101, YEARS(202)), '0.5 s a year');
-  assert.equal(paceLabel(90, YEARS(55)), '1.6 s a year');
-  assert.equal(paceLabel(36, SPORTS), '4 s a sport');
-  assert.equal(paceLabel(600, YEARS(20)), '30 s a year');
+  assert.equal(paceLabel(40, YEARS(202)), '0.2 s/year');
+  assert.equal(paceLabel(20, YEARS(202)), '0.1 s/year');
+  assert.equal(paceLabel(101, YEARS(202)), '0.5 s/year');
+  assert.equal(paceLabel(90, YEARS(55)), '1.6 s/year');
+  assert.equal(paceLabel(36, SPORTS), '4 s/sport');
+  assert.equal(paceLabel(600, YEARS(20)), '30 s/year');
   assert.equal(paceLabel(36, null), '');
 });

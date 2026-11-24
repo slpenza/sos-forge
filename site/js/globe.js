@@ -1,6 +1,8 @@
 // WebGL2 sphere renderer for the SOS simulator. One full-screen triangle; the fragment shader casts a ray per pixel,
 // intersects the unit sphere exactly and samples the equirectangular frame by latitude/longitude, so there are no
 // mesh facets, no pinched poles and no seam at +/-180 (the texture wraps in longitude, LINEAR filtered, no mips).
+// SOS labels are drawn on the sphere in the room's frame, as the sphere draws them: one per projector, so four 90
+// degrees apart, which stay put while the picture spins or tilts.
 import { camera, orientation, transpose3 } from './sphere-math.js';
 
 const VERT = `#version 300 es
@@ -11,9 +13,10 @@ const FRAG = `#version 300 es
 precision highp float;
 in vec2 vNdc; out vec4 outColor;
 uniform vec3 uEye, uRight, uUp, uFwd;
-uniform float uTanHalf, uAspect, uHasTex;
+uniform float uTanHalf, uAspect, uHasTex, uHasLabel;
 uniform mat3 uWorldToBody;
-uniform sampler2D uTex;
+uniform sampler2D uTex, uLabel;
+uniform vec4 uLabelBox; // centre latitude and longitude, half width and half height, all in radians of arc
 const float PI = 3.141592653589793;
 void main() {
   vec3 d = normalize(uFwd + vNdc.x * uTanHalf * uAspect * uRight + vNdc.y * uTanHalf * uUp);
@@ -27,6 +30,13 @@ void main() {
   float lon = atan(q.y, q.x);
   vec2 uv = vec2((lon + PI) / (2.0 * PI), (0.5 * PI - lat) / PI);
   vec3 col = uHasTex > 0.5 ? texture(uTex, uv).rgb : vec3(0.08, 0.09, 0.11);
+  // The label along its centre's parallel, from the nearest of the four copies. It is sampled outside any branch so
+  // its mipmaps see smooth derivatives; its texture is premultiplied and has a clear margin, so clamping adds nothing.
+  float k = (atan(p.x, p.z) - uLabelBox.y) / (0.5 * PI);   // in quarter turns from the first copy
+  float dx = (k - floor(k + 0.5)) * 0.5 * PI * cos(uLabelBox.x);
+  vec2 luv = vec2(0.5 + 0.5 * dx / uLabelBox.z, 0.5 - 0.5 * (asin(clamp(p.y, -1.0, 1.0)) - uLabelBox.x) / uLabelBox.w);
+  vec4 lab = texture(uLabel, luv) * step(abs(luv.x - 0.5), 0.5) * step(abs(luv.y - 0.5), 0.5) * uHasLabel;
+  col = col * (1.0 - lab.a) + lab.rgb;
   float facing = max(dot(-d, p), 0.0);
   outColor = vec4(col * (0.80 + 0.20 * facing), 1.0);
 }`;
@@ -71,9 +81,20 @@ export class Globe {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    this.u = Object.fromEntries(['uEye', 'uRight', 'uUp', 'uFwd', 'uTanHalf', 'uAspect', 'uHasTex', 'uWorldToBody', 'uTex']
-      .map((n) => [n, gl.getUniformLocation(prog, n)]));
+    this.u = Object.fromEntries(['uEye', 'uRight', 'uUp', 'uFwd', 'uTanHalf', 'uAspect', 'uHasTex', 'uWorldToBody', 'uTex',
+      'uLabel', 'uLabelBox', 'uHasLabel'].map((n) => [n, gl.getUniformLocation(prog, n)]));
     this.hasTex = false;
+    this.labelTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.labelTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    this.labelCanvas = document.createElement('canvas');
+    this.labelBox = [0, 0, 1, 1];
+    this.hasLabel = false;
     this.view = { yaw: 0, pitch: 0, distance: 3.2, fovDeg: 45 };
     this.worldToBody = transpose3(orientation());
   }
@@ -85,8 +106,35 @@ export class Globe {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
     this.hasTex = true;
+  }
+
+  /**
+   * Draw a label line on the sphere as SOS's default label format does (white Free Sans on a clear background), centred at place.lat and place.lon degrees and place.heightDeg tall, with its width following the text; an empty text hides it. Tested in the browser by test_browser.py::test_simulator_labels_on_the_sphere; how closely it matches a real sphere's font and size is not tested.
+   */
+  setLabel(text, place) {
+    if (!text || !text.trim()) { this.hasLabel = false; return; }
+    const gl = this.gl;
+    const c = this.labelCanvas;
+    const h = 64, margin = 4, font = `${Math.round(h * 0.72)}px FreeSans, "Nimbus Sans", Helvetica, Arial, sans-serif`;
+    let ctx = c.getContext('2d');
+    ctx.font = font;
+    const w = Math.min(4096, Math.ceil(ctx.measureText(text).width) + 2 * margin + Math.round(h * 0.2));
+    c.width = w; c.height = h;   // resizing clears the canvas and its settings
+    ctx = c.getContext('2d');
+    ctx.font = font; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, h / 2, w - 2 * margin);
+    gl.bindTexture(gl.TEXTURE_2D, this.labelTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    const half = (place.heightDeg * Math.PI) / 360;
+    this.labelBox = [(place.lat * Math.PI) / 180, (place.lon * Math.PI) / 180, (half * w) / h, half];
+    this.hasLabel = true;
   }
 
   /**
@@ -139,6 +187,11 @@ export class Globe {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     gl.uniform1i(this.u.uTex, 0);
+    gl.uniform4fv(this.u.uLabelBox, this.labelBox);
+    gl.uniform1f(this.u.uHasLabel, this.hasLabel ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.labelTex);
+    gl.uniform1i(this.u.uLabel, 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 }

@@ -4,8 +4,8 @@
 import { lengthLabel, paceLabel } from './lengths.js';
 
 export const STYLES = [
-  { value: 'painted', text: 'Painted on the globe' },
-  { value: 'labels', text: 'SOS labels, fixed on screen' },
+  { value: 'painted', text: 'Painted into the picture' },
+  { value: 'labels', text: 'SOS labels, fixed on the sphere' },
 ];
 
 /**
@@ -32,7 +32,7 @@ export function simulatorHref(slug, v) {
 }
 
 /**
- * Return a length as a picker option reads, such as "1 min 41 s · 0.5 s a year", or the length alone without a step. Tested by versions.test.mjs.
+ * Return a length as a picker option reads, such as "1 min 41 s · 0.5 s/year", or the length alone without a step. Tested by versions.test.mjs.
  */
 export function lengthOption(seconds, per) {
   const pace = paceLabel(seconds, per);

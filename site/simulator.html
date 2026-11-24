@@ -23,7 +23,7 @@
 <main class="sim-layout">
   <section id="stage" class="stage" aria-label="Sphere">
     <canvas id="globe" aria-label="The dataset on a virtual sphere. Drag to walk around it, scroll or pinch to step closer."></canvas>
-    <p id="caption" class="caption" aria-live="off" hidden></p>
+    <p id="label-text" class="sr-only" aria-live="off"></p>
     <p id="status" class="status" hidden></p>
     <div class="drop-hint" aria-hidden="true">Drop a dataset folder</div>
     <div class="controls">
@@ -36,7 +36,7 @@
         <button id="view-orbit" class="btn">Orbit</button>
         <button id="view-visitor" class="btn" title="Eye level for an adult standing 1.2 m from a 6-foot sphere">Visitor</button>
         <button id="spin" class="btn" aria-pressed="false">Spin</button>
-        <button id="caption-toggle" class="btn" aria-pressed="true" title="The dataset's labels as a caption that stays put while you move">Caption</button>
+        <button id="labels-toggle" class="btn" aria-pressed="false" title="SOS labels: the dataset's labels.txt, drawn four times around the sphere and fixed while the picture turns">Labels</button>
       </div>
     </div>
   </section>

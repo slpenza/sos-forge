@@ -2,7 +2,7 @@
 
 The simulator at sos.stevenpenza.com/simulator.html plays a dataset on a virtual 6-foot sphere in your browser, so
 you can check it before it goes on a real one. It follows the dataset's `playlist.sos` the way the sphere does:
-frame rate, the hold on the first and last frames, auto-play, spin and tilt.
+frame rate, the hold on the first and last frames, auto-play, spin, tilt and SOS labels.
 
 ## Look at a published dataset
 
@@ -20,7 +20,7 @@ opens it again.
 | **Orbit** | A view from a few metres away, showing the whole sphere |
 | **Visitor** | Eye level for an adult standing 1.2 m from a 6-foot sphere. The text panels at 30° south sit at that height |
 | **Spin** | Turns the dataset about its poles, as a sphere set to rotate would |
-| **Caption** | Shows the dataset's labels as a caption that stays put while you move |
+| **Labels** | Shows or hides the dataset's SOS labels on the sphere, as the iPad's Display Elements list does |
 | Space | Play or pause |
 
 ## Check your own dataset
@@ -38,10 +38,22 @@ Datasets carry their text in two forms:
 - **Panels printed into the picture**, at 30° south, several times around the globe. They look the same on every
   sphere, but they move when the picture moves: when a presenter rotates the globe, or when you drag in the
   simulator.
-- **SOS labels**, a `labels.txt` file with one line per frame. The sphere draws these itself, four times around,
-  in a fixed position. They ship hidden; a presenter can switch them on from the iPad's Display Elements list.
+- **SOS labels**, a `labels.txt` file with one line per frame. The sphere draws these itself, once for each of its
+  four projectors, so four times around. They stay put while the picture spins or tilts. The painted versions ship
+  them hidden, and a presenter can switch them on from the iPad's Display Elements list. The SOS-labels versions
+  show them.
 
-The simulator's **Caption** button shows the same labels, fixed at the top of the view.
+The simulator draws the labels where the sphere does, and shows or hides them as the version's playlist says. Its
+**Labels** button switches them, like the iPad. The playlist can place them:
+
+| Playlist line | What it sets | Default |
+|---|---|---|
+| `labelvertical` | Degrees north of each projector's centre (negative is south) | −25 |
+| `labelhorizontal` | Degrees east of each projector's centre | 0 |
+| `labelheight` | Height in degrees of latitude; the width follows the text | not stated by NOAA; the simulator uses 4 |
+
+Set them in the recipe's `[playlist]` table. A label wider than a quarter of the way round is cut off in the
+simulator where it would meet the next copy.
 
 To make labels the dataset's only text, with no panels printed into the picture, set this in the recipe:
 
@@ -54,3 +66,6 @@ mode = "labels"
 
 A real sphere is lit by four projectors whose edges blend, so brightness, colour and the seams between them differ
 from your screen. Use the simulator to check content, timing and text, then confirm on the sphere itself.
+
+The labels use SOS's default format, white Free Sans on a clear background. A site that changed it in NOAA's Label
+Editor draws them differently, and NOAA gives no default height, so their size on a real sphere may differ.

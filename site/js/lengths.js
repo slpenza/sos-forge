@@ -20,8 +20,8 @@ function pace(seconds, per) {
 }
 
 /**
- * Return a movie's pace in words, such as "0.2 s a year" or "4 s a sport", or an empty string without a step. Tested by lengths.test.mjs.
+ * Return a movie's pace in words, such as "0.2 s/year" or "4 s/sport", or an empty string without a step. Tested by lengths.test.mjs.
  */
 export function paceLabel(seconds, per) {
-  return per && seconds ? `${pace(seconds, per)} s a ${per.unit}` : '';
+  return per && seconds ? `${pace(seconds, per)} s/${per.unit}` : '';
 }

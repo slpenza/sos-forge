@@ -1,6 +1,7 @@
 // The SOS simulator page: plays a gallery dataset or a dropped dataset folder on a WebGL sphere, following the
 // playlist the way the sphere does (frame rate, first/last holds, auto-play, spin, tilt). A gallery dataset with
-// several versions (lengths, painted text or SOS labels) can switch between them in place. Nothing is uploaded.
+// several versions (lengths, painted text or SOS labels) can switch between them in place. SOS labels are drawn on the
+// sphere, where the sphere draws them, and shown or hidden as the playlist says. Nothing is uploaded.
 import { Globe, attachControls } from './globe.js';
 import { parsePlaylist, parseLabels, playbackSettings, findDataFile } from './playlist.js';
 import { visitorView } from './sphere-math.js';
@@ -14,7 +15,7 @@ const MPEG4_HINT = 'This video doesn’t play in web browsers. MPEG-4 Part 2, th
 
 const state = { globe: null, media: null, kind: null, settings: null, phase: 'play', until: 0, paused: false,
   spinOn: false, spinDeg: 0, last: performance.now(), dirty: false, urls: [], labels: [], sourceFps: 30,
-  captionOn: true, shown: -1 };
+  labelsOn: false, shown: -1 };
 
 /**
  * Show a status line under the sphere, or hide it when the message is empty. Tested in the browser by loading a bad folder.
@@ -65,15 +66,25 @@ function describe(s, extra = {}) {
 }
 
 /**
- * Start a dataset from its playlist settings and a media URL, as a video or a still image; extra.at resumes a video that far through (a fraction) and extra.paused keeps it paused, for switching versions. Tested in the browser with every gallery dataset, a version switch and a dropped folder.
+ * Set whether SOS labels show, as the Labels button does and the iPad's Display Elements list does on a sphere, keeping the button's pressed state in step; it is disabled when the dataset has no labels. Tested in the browser by test_browser.py::test_simulator_labels_on_the_sphere.
+ */
+function setLabels(on) {
+  state.labelsOn = on;
+  state.shown = -1;
+  $('labels-toggle').setAttribute('aria-pressed', String(on && state.labels.length > 0));
+  $('labels-toggle').disabled = !state.labels.length;
+}
+
+/**
+ * Start a dataset from its playlist settings and a media URL, as a video or a still image; extra.at resumes a video that far through (a fraction), extra.paused keeps it paused, and extra.labelsOn overrides the playlist's labelvisible, for switching versions. Tested in the browser with every gallery dataset, a version switch and a dropped folder.
  */
 function start(settings, url, isVideo, sourceFps = 30, extra = {}) {
   unload();
   state.settings = settings;
-  state.labels = isVideo ? extra.labels || [] : [];
+  state.labels = isVideo ? extra.labels || [] : [];   // SOS ignores labels on a still image
   state.sourceFps = sourceFps;
-  state.shown = -1;
-  $('caption').hidden = true;
+  setLabels(extra.labelsOn ?? settings.labels.visible);
+  showLabel(null);
   state.kind = isVideo ? 'movie' : 'texture';
   state.spinOn = isVideo ? settings.spin : true;
   state.spinDeg = 0;
@@ -134,7 +145,7 @@ function frame(now) {
   if (v && v.readyState >= 2 && (state.dirty || !('requestVideoFrameCallback' in v))) { state.globe.upload(v); state.dirty = false; }
   if (v && document.activeElement !== $('scrub')) { $('scrub').value = String(v.currentTime); }
   if (v) $('time').textContent = `${clock(v.currentTime)} / ${clock(v.duration)}`;
-  showCaption(v);
+  showLabel(v);
   if (state.spinOn && state.settings) {
     const rate = state.kind === 'movie' ? state.settings.spinDegPerSec || TEXTURE_SPIN : TEXTURE_SPIN;
     state.spinDeg = (state.spinDeg + rate * dt) % 360;
@@ -145,14 +156,18 @@ function frame(now) {
 }
 
 /**
- * Show the label line for the video's current frame as a fixed caption, updating the text only when the frame's line changes. Tested in the browser with a dataset whose labels.txt changes per segment.
+ * Draw the label line for the video's current frame on the sphere, and keep it in the page's hidden label text for screen readers, redrawing only when the frame's line changes; with labels off or absent nothing is drawn. Tested in the browser by test_browser.py::test_simulator_labels_on_the_sphere, with a dataset whose labels.txt changes per frame.
  */
-function showCaption(v) {
-  const cap = $('caption');
-  if (!v || !state.captionOn || !state.labels.length) { cap.hidden = true; state.shown = -1; return; }
+function showLabel(v) {
+  if (!v || !state.labelsOn || !state.labels.length) {
+    if (state.shown !== -2) { state.globe.setLabel(''); $('label-text').textContent = ''; state.shown = -2; }
+    return;
+  }
   const i = Math.min(state.labels.length - 1, Math.max(0, Math.floor(v.currentTime * state.sourceFps + 1e-3)));
-  if (i !== state.shown) { cap.textContent = state.labels[i]; state.shown = i; }
-  cap.hidden = !state.labels[i];
+  if (i === state.shown) return;
+  state.globe.setLabel(state.labels[i], state.settings.labels);
+  $('label-text').textContent = state.labels[i];
+  state.shown = i;
 }
 
 /**
@@ -187,7 +202,8 @@ async function openFiles(fileList) {
   const url = URL.createObjectURL(data);
   const isVideo = /\.(mp4|m4v|webm)$/i.test(data.name);
   const lf = files.find((f) => f.name.toLowerCase() === 'labels.txt');
-  const labels = lf ? parseLabels(await lf.text()) : [];
+  // A playlist without a label line shows no labels on a sphere; a folder without a playlist shows any labels.txt.
+  const labels = lf && (!pl || settings.label) ? parseLabels(await lf.text()) : [];
   start(settings, url, isVideo, 30, { labels });
   state.urls.push(url);
   $('dataset').value = '';
@@ -205,8 +221,9 @@ async function playVersion(d, v, keepPlace) {
   const place = m && m.duration ? { at: m.currentTime / m.duration, paused: state.paused } : {};
   let labels = [];
   if (v.labels) { try { labels = parseLabels(await (await fetch(v.labels)).text()); } catch { labels = []; } }
+  // The SOS-labels version's playlist shows its labels; the painted one ships them hidden, as on a sphere.
   start(playbackSettings(d.playlist), v.video, d.kind === 'movie', d.source_fps || 30,
-    { credits: d.credits, licences: d.licences, downloads: v.downloads, labels, ...place });
+    { credits: d.credits, licences: d.licences, downloads: v.downloads, labels, labelsOn: v.style === 'labels', ...place });
 }
 
 /**
@@ -243,10 +260,7 @@ function init() {
   $('play').addEventListener('click', togglePlay);
   $('scrub').addEventListener('input', () => { if (state.kind === 'movie') { state.media.currentTime = Number($('scrub').value); state.phase = 'play'; } });
   $('spin').addEventListener('click', () => { state.spinOn = !state.spinOn; $('spin').setAttribute('aria-pressed', String(state.spinOn)); });
-  $('caption-toggle').addEventListener('click', () => {
-    state.captionOn = !state.captionOn;
-    $('caption-toggle').setAttribute('aria-pressed', String(state.captionOn));
-  });
+  $('labels-toggle').addEventListener('click', () => setLabels(!state.labelsOn));
   $('view-orbit').addEventListener('click', () => Object.assign(state.globe.view, ORBIT));
   $('view-visitor').addEventListener('click', () => Object.assign(state.globe.view, visitorView(), { fovDeg: VISITOR_FOV }));
   $('folder').addEventListener('change', (e) => openFiles(e.target.files));

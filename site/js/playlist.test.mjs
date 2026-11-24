@@ -1,7 +1,7 @@
 // Tests for the simulator's playlist parsing and loop timing. Run: node --test site/js/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePlaylist, parseLabels, playbackSettings, findDataFile } from './playlist.js';
+import { parsePlaylist, parseLabels, playbackSettings, findDataFile, LABEL_HEIGHT_DEG } from './playlist.js';
 
 test("labels keep the last frame's line", () => {
   assert.deepEqual(parseLabels('1820\n1821\n1822\n'), ['1820', '1821', '1822']);
@@ -29,6 +29,18 @@ test('fills SOS defaults and clamps', () => {
   assert.equal(s.spinDegPerSec, 5);
   assert.deepEqual(s.tilt, { x: 0, y: 0, z: 0 });
   assert.equal(playbackSettings({}).name, 'Untitled dataset');
+});
+
+test('reads where the sphere draws its labels', () => {
+  const none = playbackSettings({});
+  assert.equal(none.label, '');
+  assert.deepEqual(none.labels, { visible: true, lat: -25, lon: 0, heightDeg: LABEL_HEIGHT_DEG });
+  const ours = playbackSettings(parsePlaylist('label = labels.txt\nlabelvisible = false\n'));
+  assert.equal(ours.label, 'labels.txt');
+  assert.equal(ours.labels.visible, false);
+  const set = playbackSettings(parsePlaylist('labelvisible = TRUE\nlabelvertical = 120\nlabelhorizontal = -30\nlabelheight = 6\n'));
+  assert.deepEqual(set.labels, { visible: true, lat: 90, lon: -30, heightDeg: 6 });
+  assert.equal(playbackSettings({ labelvisible: 0 }).labels.visible, false);
 });
 
 test('finds the data file in a dropped folder', () => {

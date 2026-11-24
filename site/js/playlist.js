@@ -37,12 +37,16 @@ export function parsePlaylist(text) {
   return out;
 }
 
+// NOAA's playlist reference gives labelheight (degrees of latitude) no default, so the simulator assumes this one.
+export const LABEL_HEIGHT_DEG = 4;
+
 /**
  * Return the playback settings the simulator needs, with SOS's documented defaults filled in.
- * Tested by playlist.test.mjs "fills SOS defaults and clamps".
+ * Tested by playlist.test.mjs "fills SOS defaults and clamps" and "reads where the sphere draws its labels".
  */
 export function playbackSettings(p) {
   const num = (k, d) => (typeof p[k] === 'number' && Number.isFinite(p[k]) ? p[k] : d);
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
   return {
     name: p.name || 'Untitled dataset',
     description: p.description || '',
@@ -54,6 +58,14 @@ export function playbackSettings(p) {
     tilt: { x: num('tiltx', 0), y: num('tilty', 0), z: num('tiltz', 0) },
     spin: num('zrotationenable', 0) !== 0,
     spinDegPerSec: num('zfps', 50) * num('zrotationangle', 0.1),
+    label: p.label ? String(p.label) : '',
+    // SOS 5.3+: centred labelvertical degrees north and labelhorizontal east of each projector's centre, labelheight tall.
+    labels: {
+      visible: !/^(false|0|no)$/i.test(String(p.labelvisible ?? 'true').trim()),
+      lat: clamp(num('labelvertical', -25), -90, 90),
+      lon: clamp(num('labelhorizontal', 0), -180, 180),
+      heightDeg: clamp(num('labelheight', LABEL_HEIGHT_DEG), 0.5, 30),
+    },
   };
 }
 

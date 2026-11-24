@@ -82,7 +82,7 @@ def build_fixture(tmp, config, **build):
         make_dataset(dist / folder, codec="mpeg4", name=folder)
         (dist / folder / "labels.txt").write_text("".join(f"{word} {i}\n" for i in range(30)))
     with (dist / "tiny_h264" / "playlist.sos").open("a") as f:
-        f.write("lastdwell = 3000\n")   # hold the last frame, as SOS does, so the caption's end state lasts long enough to see
+        f.write("lastdwell = 3000\n")   # hold the last frame, as SOS does, so the label's end state lasts long enough to see
     make_dataset(dist / "second_h264", name="Second (H.264)")
     (dist / "still").mkdir()
     cv2.imwrite(str(dist / "still" / "still_256x128.jpg"), np.full((128, 256, 3), 90, np.uint8))
@@ -207,8 +207,8 @@ def test_gallery_cards_set_downloads(browser, origin):
     assert tiny.locator(".source a").get_attribute("href") == "https://example.com/source"
     length, text = tiny.get_by_label("Length"), tiny.get_by_label("Text")
     sim, dl = tiny.locator(".actions a.primary"), tiny.locator(".actions a.btn:not(.primary)")
-    assert length.locator("option").all_inner_texts() == ["1 s · 0.5 s a day", "3 s · 1.5 s a day"]
-    assert text.locator("option").all_inner_texts() == ["Painted on the globe", "SOS labels, fixed on screen"]
+    assert length.locator("option").all_inner_texts() == ["1 s · 0.5 s/day", "3 s · 1.5 s/day"]
+    assert text.locator("option").all_inner_texts() == ["Painted into the picture", "SOS labels, fixed on the sphere"]
     state = lambda: (sim.get_attribute("href"), dl.get_attribute("href").rsplit("/", 1)[1], dl.inner_text())
     assert state() == ("simulator.html?d=tiny", "tiny_256x128.zip", "Download")
     assert tiny.locator(".poster a").get_attribute("href") == "simulator.html?d=tiny"
@@ -249,52 +249,90 @@ def test_flat_preview_plays_with_captions(browser, origin):
     assert problems == []
 
 
-def test_simulator_caption_stays_put(browser, origin):
-    """Checks the simulator shows the dataset's labels as a caption that follows the frames, keeps its place (centre and top; its width follows the text) while the globe is dragged, and still shows the last frame's label at the end of the movie. Covers simulator.js showCaption against a real WebGL sphere; this test is not itself tested."""
+def canvas_pixels(page):
+    """Return the simulator's sphere canvas as it looks now, as a BGR array, with the controls over it masked out. Helper for the label tests; not itself tested."""
+    page.wait_for_timeout(400)   # let a few animation frames draw what was just changed
+    png = page.locator("#globe").screenshot(mask=[page.locator(".controls"), page.locator("#status")])
+    return cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
+
+
+def label_box(page):
+    """Return the bounding box (x0, y0, x1, y1) of what the Labels button adds to the paused sphere, by drawing it with labels on and off, and leave labels on. Helper for test_simulator_labels_on_the_sphere; not itself tested."""
+    toggle = page.locator("#labels-toggle")
+    assert toggle.get_attribute("aria-pressed") == "true"
+    on = canvas_pixels(page)
+    toggle.click()
+    off = canvas_pixels(page)
+    toggle.click()
+    ys, xs = np.nonzero(np.abs(on.astype(int) - off.astype(int)).max(axis=2) > 40)
+    assert len(xs) > 20, "the labels drew nothing"
+    return (xs.min(), ys.min(), xs.max(), ys.max()), off
+
+
+def test_simulator_labels_on_the_sphere(browser, origin):
+    """Checks the SOS-labels version starts with its labels on and the painted one with them off, as their playlists say; that the label is drawn on the sphere's front below the equator, follows the frames, stays put while the picture spins, moves with the sphere when the view is dragged, and still shows the last frame's line at the end of the movie. Covers simulator.js showLabel and setLabels, Globe.setLabel and the label shader against a real WebGL sphere; this test is not itself tested."""
     page, problems = open_page(browser, origin, "/simulator.html?d=tiny")
-    caption = page.locator("#caption")
-    page.wait_for_function("() => document.getElementById('caption').textContent.startsWith('Frame ')", timeout=15000)
-    first = caption.inner_text()
-    centre = lambda b: (round(b["x"] + b["width"] / 2), round(b["y"]))
-    box = centre(caption.bounding_box())
-    canvas = page.locator(".stage canvas").bounding_box()
+    toggle, text = page.locator("#labels-toggle"), page.locator("#label-text")
+    page.wait_for_function("() => document.getElementById('time').textContent !== '0:00 / 0:00'", timeout=15000)
+    assert toggle.get_attribute("aria-pressed") == "false" and text.text_content() == ""
+    toggle.click()
+    page.wait_for_function("() => document.getElementById('label-text').textContent.startsWith('Frame ')", timeout=15000)
+    page.goto(origin + "/simulator.html?d=tiny&text=labels", wait_until="networkidle")
+    page.wait_for_function("() => document.getElementById('label-text').textContent.startsWith('Label ')", timeout=15000)
+    first = text.text_content()
+    page.wait_for_function("t => document.getElementById('label-text').textContent !== t", arg=first, timeout=15000)
+    page.locator("#play").click()                       # pause, so only the labels and the spin change the picture
+    (x0, y0, x1, y1), off = label_box(page)
+    h, w = off.shape[:2]
+    assert abs((x0 + x1) / 2 - w / 2) < w * 0.05 and (y0 + y1) / 2 > h / 2 and x1 - x0 > y1 - y0
+    # Spin turns the picture about 15 degrees, which would carry a label drawn on it about 70 px. Glyph edges over a
+    # bright background add less to the on/off difference, so the box is compared by its centre, within a few pixels.
+    centre = lambda b: ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
+    page.locator("#spin").click()
+    page.wait_for_timeout(3000)
+    page.locator("#spin").click()
+    box, turned = label_box(page)
+    assert np.abs(turned.astype(int) - off.astype(int)).mean() > 2, "the picture didn't turn"
+    assert np.hypot(*np.subtract(centre(box), centre((x0, y0, x1, y1)))) < 8, "the label moved with the picture"
+    canvas = page.locator("#globe").bounding_box()
     cx, cy = canvas["x"] + canvas["width"] / 2, canvas["y"] + canvas["height"] / 2
     page.mouse.move(cx, cy)
     page.mouse.down()
-    for step in range(1, 11):
-        page.mouse.move(cx + 18 * step, cy + 6 * step)
-        page.wait_for_timeout(60)
+    for step in range(1, 11):                          # 30 px is 9 degrees, so the next copy stays beyond the limb
+        page.mouse.move(cx + 3 * step, cy)
+        page.wait_for_timeout(40)
     page.mouse.up()
-    assert centre(caption.bounding_box()) == box and caption.is_visible()
-    # Wait for the frames to move on rather than sampling during the drag: CI's software WebGL can be slow to start.
-    page.wait_for_function("t => document.getElementById('caption').textContent !== t", arg=first, timeout=15000)
-    assert caption.inner_text().startswith("Frame ")
-    # The end of the movie, where SOS holds for lastdwell: the caption must keep the last frame's label, not go blank.
+    dragged, _ = label_box(page)
+    assert centre(dragged)[0] > centre(box)[0] + 15, "the label didn't move with the sphere"
+    # The end of the movie, where SOS holds for lastdwell: the label must keep the last frame's line, not go blank.
     # A MutationObserver records every blank moment, however brief, instead of polling for one.
-    page.evaluate("""() => { window.blanks = []; const c = document.getElementById('caption');
-        new MutationObserver(() => { if (c.hidden || !c.textContent.trim()) window.blanks.push(c.textContent); })
-          .observe(c, { attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true });
+    page.locator("#play").click()
+    page.evaluate("""() => { window.blanks = []; const c = document.getElementById('label-text');
+        new MutationObserver(() => { if (!c.textContent.trim()) window.blanks.push(c.textContent); })
+          .observe(c, { childList: true, characterData: true, subtree: true });
         const s = document.getElementById('scrub'); s.value = s.max; s.dispatchEvent(new Event('input')); }""")
     page.wait_for_timeout(1500)
-    assert page.evaluate("() => window.blanks") == []
+    assert page.evaluate("() => window.blanks") == [] and text.text_content().startswith("Label ")
     assert problems == []
 
 
 def test_simulator_switches_versions(browser, origin):
-    """Checks the simulator opens the version a card link names, shows the same Length and Text selects, and switching plays that version's preview and labels from the same place, recording it in the address; a dataset without versions hides the selects. Covers simulator.js playVersion and loadGallery with versions.js in a real browser; this test is not itself tested."""
+    """Checks the simulator opens the version a card link names, shows the same Length and Text selects, and switching plays that version's preview and labels from the same place, with labels on for the SOS-labels version, recording it in the address; a dataset without versions hides the selects. Covers simulator.js playVersion and loadGallery with versions.js in a real browser; this test is not itself tested."""
     page, problems = open_page(browser, origin, "/simulator.html?d=tiny&s=3")
-    caption = page.locator("#caption")
-    page.wait_for_function("() => document.getElementById('caption').textContent.startsWith('Three ')", timeout=15000)
+    toggle = page.locator("#labels-toggle")
+    page.wait_for_function("() => !document.getElementById('labels-toggle').disabled", timeout=15000)
+    toggle.click()                                      # the painted version ships its labels hidden
+    page.wait_for_function("() => document.getElementById('label-text').textContent.startsWith('Three ')", timeout=15000)
     length, text = page.locator("#versions").get_by_label("Length"), page.locator("#versions").get_by_label("Text")
     assert length.input_value() == "3" and text.input_value() == "painted"
     assert page.locator("#ds-downloads a").all_inner_texts() == ["tiny_3s_256x128.zip"]
     page.locator("#play").click()                       # pause, so the place to keep is fixed
     page.evaluate("() => { const s = document.getElementById('scrub'); s.value = String(s.max * 0.5); s.dispatchEvent(new Event('input')); }")
-    page.wait_for_function("() => document.getElementById('caption').textContent === 'Three 15'", timeout=15000)
+    page.wait_for_function("() => document.getElementById('label-text').textContent === 'Three 15'", timeout=15000)
     text.select_option("labels")
-    page.wait_for_function("() => document.getElementById('caption').textContent === 'Both 15'", timeout=15000)
+    page.wait_for_function("() => document.getElementById('label-text').textContent === 'Both 15'", timeout=15000)
     assert page.evaluate("() => location.search") == "?d=tiny&s=3&text=labels"
-    assert page.locator("#play").inner_text() == "Play" and caption.is_visible()
+    assert page.locator("#play").inner_text() == "Play" and toggle.get_attribute("aria-pressed") == "true"
     assert page.locator("#ds-downloads a").all_inner_texts() == ["tiny_3s_labels_256x128.zip"]
     page.locator("#dataset").select_option("second")
     page.wait_for_function("() => location.search === '?d=second'")
