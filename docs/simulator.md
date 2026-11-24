@@ -15,7 +15,8 @@ opens it again.
 
 | Control | What it does |
 |---|---|
-| Drag | Walk around the sphere |
+| Drag sideways, or ← and → | Turns the picture about its poles, as a presenter does from the iPad. SOS labels stay put |
+| Drag up or down | Looks from higher or lower |
 | Scroll or pinch | Step closer or further away |
 | **Orbit** | A view from a few metres away, showing the whole sphere |
 | **Visitor** | Eye level for an adult standing 1.2 m from a 6-foot sphere. The text panels at 30° south sit at that height |
@@ -39,7 +40,8 @@ Datasets carry their text in two forms:
   sphere, but they move when the picture moves: when a presenter rotates the globe, or when you drag in the
   simulator.
 - **SOS labels**, a `labels.txt` file with one line per frame. The sphere draws these itself, once for each of its
-  four projectors, so four times around. They stay put while the picture spins or tilts. The painted versions ship
+  four projectors, so four times around. They stay put while the picture spins, tilts or is turned (in the
+  simulator, by a sideways drag). The painted versions ship
   them hidden, and a presenter can switch them on from the iPad's Display Elements list. The SOS-labels versions
   show them.
 

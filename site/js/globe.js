@@ -197,9 +197,9 @@ export class Globe {
 }
 
 /**
- * Wire pointer drag, wheel and pinch to orbit and zoom a Globe's view, clamping pitch and distance. Tested in the browser with mouse and touch.
+ * Wire pointer drag, wheel and pinch to a Globe: a sideways drag calls onTurn with degrees to turn the picture about its poles (or orbits the view when there is no onTurn), an up-and-down drag sets the viewing height, and wheel or pinch zoom, clamping pitch and distance. Tested in the browser by test_browser.py::test_simulator_labels_on_the_sphere with a mouse; touch is exercised by hand.
  */
-export function attachControls(globe, element, onChange = () => {}) {
+export function attachControls(globe, element, onChange = () => {}, onTurn = null) {
   const pts = new Map();
   let pinch = 0;
   element.addEventListener('pointerdown', (e) => {
@@ -211,7 +211,9 @@ export function attachControls(globe, element, onChange = () => {}) {
     const prev = pts.get(e.pointerId);
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pts.size === 1) {
-      globe.view.yaw -= (e.clientX - prev.x) * 0.3;
+      // Rightward turns the surface rightward: eastward, a positive spin (sphere-math.js orientation).
+      if (onTurn) onTurn((e.clientX - prev.x) * 0.3);
+      else globe.view.yaw -= (e.clientX - prev.x) * 0.3;
       globe.view.pitch = Math.max(-80, Math.min(80, globe.view.pitch + (e.clientY - prev.y) * 0.3));
     } else if (pts.size === 2) {
       const [a, b] = [...pts.values()];

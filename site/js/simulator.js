@@ -251,12 +251,22 @@ async function loadGallery() {
 }
 
 /**
+ * Turn the picture about its poles by degrees, eastward when positive, as a presenter turns the globe; it adds to the same angle Spin advances, and SOS labels stay put. Tested in the browser by test_browser.py::test_simulator_labels_on_the_sphere.
+ */
+function turn(deg) {
+  if (!state.settings) return;
+  state.spinDeg = (state.spinDeg + deg + 360) % 360;
+  state.globe.setOrientation(state.settings.tilt, state.spinDeg);
+}
+
+/**
  * Wire every control, the drop zone and the keyboard, then start rendering. Tested in the browser.
  */
 function init() {
   try { state.globe = new Globe($('globe')); } catch (e) { status(String(e.message || e)); return; }
   Object.assign(state.globe.view, ORBIT);
-  attachControls(state.globe, $('globe'));
+  // A sideways drag turns the picture, as a presenter does from the iPad, so SOS labels stay put while it moves.
+  attachControls(state.globe, $('globe'), () => {}, turn);
   $('play').addEventListener('click', togglePlay);
   $('scrub').addEventListener('input', () => { if (state.kind === 'movie') { state.media.currentTime = Number($('scrub').value); state.phase = 'play'; } });
   $('spin').addEventListener('click', () => { state.spinOn = !state.spinOn; $('spin').setAttribute('aria-pressed', String(state.spinOn)); });
@@ -271,8 +281,8 @@ function init() {
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, select')) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-    if (e.code === 'ArrowLeft') state.globe.view.yaw += 5;
-    if (e.code === 'ArrowRight') state.globe.view.yaw -= 5;
+    if (e.code === 'ArrowLeft') turn(-5);
+    if (e.code === 'ArrowRight') turn(5);
   });
   loadGallery();
   requestAnimationFrame(frame);

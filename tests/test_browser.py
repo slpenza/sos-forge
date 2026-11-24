@@ -284,7 +284,7 @@ def label_box(page):
 
 
 def test_simulator_labels_on_the_sphere(browser, origin):
-    """Checks the SOS-labels version starts with its labels on and the painted one with them off, as their playlists say; that the label is drawn on the sphere's front below the equator, follows the frames, stays put while the picture spins, moves with the sphere when the view is dragged, and still shows the last frame's line at the end of the movie. Covers simulator.js showLabel and setLabels, Globe.setLabel and the label shader against a real WebGL sphere; this test is not itself tested."""
+    """Checks the SOS-labels version starts with its labels on and the painted one with them off, as their playlists say; that the label is drawn on the sphere's front below the equator, follows the frames, stays put while the picture turns by Spin, a sideways drag or the arrow keys, moves when an up-and-down drag changes the viewing height, and still shows the last frame's line at the end of the movie. Covers simulator.js showLabel, setLabels and turn, attachControls, Globe.setLabel and the label shader against a real WebGL sphere; this test is not itself tested."""
     page, problems = open_page(browser, origin, "/simulator.html?d=tiny")
     toggle, text = page.locator("#labels-toggle"), page.locator("#label-text")
     page.wait_for_function("() => document.getElementById('time').textContent !== '0:00 / 0:00'", timeout=15000)
@@ -310,14 +310,28 @@ def test_simulator_labels_on_the_sphere(browser, origin):
     assert np.hypot(*np.subtract(centre(box), centre((x0, y0, x1, y1)))) < 8, "the label moved with the picture"
     canvas = page.locator("#globe").bounding_box()
     cx, cy = canvas["x"] + canvas["width"] / 2, canvas["y"] + canvas["height"] / 2
-    page.mouse.move(cx, cy)
-    page.mouse.down()
-    for step in range(1, 11):                          # 30 px is 9 degrees, so the next copy stays beyond the limb
-        page.mouse.move(cx + 3 * step, cy)
-        page.wait_for_timeout(40)
-    page.mouse.up()
-    dragged, _ = label_box(page)
-    assert centre(dragged)[0] > centre(box)[0] + 15, "the label didn't move with the sphere"
+
+    def drag(dx, dy):
+        """Drag across the sphere in ten steps from its centre. Helper; not itself tested."""
+        page.mouse.move(cx, cy)
+        page.mouse.down()
+        for step in range(1, 11):
+            page.mouse.move(cx + dx * step / 10, cy + dy * step / 10)
+            page.wait_for_timeout(40)
+        page.mouse.up()
+
+    # A sideways drag, and the arrow keys, turn the picture as a presenter does: the label stays where it is.
+    before = turned
+    for move in (lambda: drag(60, 0), lambda: [page.keyboard.press("ArrowRight") for _ in range(3)]):
+        move()
+        moved, after = label_box(page)
+        assert np.abs(after.astype(int) - before.astype(int)).mean() > 2, "the picture didn't turn"
+        assert np.hypot(*np.subtract(centre(moved), centre(box))) < 8, "the label moved with the picture"
+        before = after
+    # An up-and-down drag looks from higher: the whole sphere moves on screen, its labels with it.
+    drag(0, 40)
+    looked, _ = label_box(page)
+    assert abs(centre(looked)[1] - centre(box)[1]) > 10, "the label didn't move with the view"
     # The end of the movie, where SOS holds for lastdwell: the label must keep the last frame's line, not go blank.
     # A MutationObserver records every blank moment, however brief, instead of polling for one.
     page.locator("#play").click()
