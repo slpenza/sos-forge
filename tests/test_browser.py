@@ -59,6 +59,14 @@ downloads = ["still_256x128.zip"]
 '''
 
 
+CHANGES = [
+    {"version": "v0.2.0", "date": "2026-11-24", "notes": "https://example.org/v0.2.0",
+     "entries": [{"kind": "New dataset", "text": "Tiny joins the gallery."}, {"kind": "Simulator", "text": "Labels on the sphere."}]},
+    {"version": "v0.1.0", "date": "2026-11-02", "notes": "https://example.org/v0.1.0",
+     "entries": [{"kind": "Gallery", "text": "Cards play their previews."}, {"kind": "Help", "text": "Ask from home."}]},
+]
+
+
 HELP_FRAME = """
 [help]
 bar = "./site/help-bar.html"
@@ -90,6 +98,8 @@ def build_fixture(tmp, config, **build):
     (dist / "still" / "playlist.sos").write_text("name = Still\ndescription = {{ A still. }}\ndata = still_256x128.jpg\n")
     (tmp / "site.toml").write_text(config)
     site.build_site(tmp / "site.toml", tmp / "site", dist=dist, **build)
+    # What's new comes from the repo's real tags, which CI's shallow checkout lacks: the fixture's list is fixed.
+    (tmp / "site" / "changes.json").write_text(json.dumps({"versions": CHANGES}))
     return tmp / "site"
 
 
@@ -185,7 +195,7 @@ def test_watch_catches_errors(browser, origin):
     assert "boom" in text and "Content Security Policy" in text and "HTTP 404" in text and "missing.json" in text
 
 
-@pytest.mark.parametrize("path", ["/", "/simulator.html", "/simulator.html?d=tiny", "/404.html"])
+@pytest.mark.parametrize("path", ["/", "/simulator.html", "/simulator.html?d=tiny", "/changes.html", "/404.html"])
 def test_pages_load_clean(browser, origin, path):
     """Checks each page loads under the deployed CSP with no console or script errors and no failed same-origin requests. Covers the static pages, gallery.js, simulator.js and their imports; this test is not itself tested."""
     page, problems = open_page(browser, origin, path)
@@ -341,6 +351,34 @@ def test_simulator_switches_versions(browser, origin):
     page.locator("#dataset").select_option("second")
     page.wait_for_function("() => location.search === '?d=second'")
     assert page.locator("#versions").is_hidden()
+    assert problems == []
+
+
+def test_whats_new_lists_visitor_changes(browser, origin):
+    """Checks the What's new page lists every version newest first with its date, its number linking to its release notes and its lines tagged by kind; the home page shows the latest three lines, dated, with a link to the page; every site page's nav links What's new; and a phone-width page doesn't scroll sideways. Covers changes.js renderAll, renderLatest and init against the built site; the list's source is tested by test_changes.py."""
+    page, problems = open_page(browser, origin, "/changes.html")
+    page.wait_for_selector("#changes .change")
+    heads = page.locator("#changes .change h2")
+    assert [" ".join(h.split()) for h in heads.all_inner_texts()] == ["24 Nov 2026 v0.2.0", "2 Nov 2026 v0.1.0"]
+    assert heads.first.locator("a.ver").get_attribute("href") == "https://example.org/v0.2.0"
+    assert page.locator("#changes .change").first.locator("li").all_inner_texts() == [
+        "New dataset Tiny joins the gallery.", "Simulator Labels on the sphere."]
+    assert page.locator('nav a[aria-current="page"]').inner_text() == "What's new"
+    page.goto(origin + "/", wait_until="networkidle")
+    home = page.locator("#whats-new")
+    home.wait_for(state="visible")
+    assert home.locator("li").all_inner_texts() == ["24 Nov 2026 New dataset Tiny joins the gallery.",
+                                                    "24 Nov 2026 Simulator Labels on the sphere.",
+                                                    "2 Nov 2026 Gallery Cards play their previews."]
+    assert home.locator("a").get_attribute("href") == "changes.html"
+    for path in ("/", "/simulator.html"):
+        page.goto(origin + path, wait_until="networkidle")
+        assert page.locator('nav a[href="changes.html"]').inner_text() == "What's new"
+    phone = browser.new_page(viewport={"width": 390, "height": 844})
+    phone.goto(origin + "/changes.html", wait_until="networkidle")
+    phone.wait_for_selector("#changes .change")
+    assert phone.evaluate("document.documentElement.scrollWidth") <= 390
+    phone.close()
     assert problems == []
 
 

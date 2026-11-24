@@ -133,6 +133,10 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
 - Every version has a scope doc at `design/v<major>/vX.Y.Z.md` saying what the version decides, what it doesn't,
   and how it was tested. The doc is committed with its code and bumped by hand in `pyproject.toml` and
   `sosforge/meta.py`. The pre-commit hook refuses code without a scope doc.
+- **What's new** on the site lists each released version's `## For visitors` section: bullets of the form
+  `- <Kind>: <what a visitor would notice>`, where Kind is New dataset, Updated dataset, Gallery, Simulator, Help or
+  sos-forge. Leave the section out of a version visitors wouldn't notice. A version shows once its tag exists, dated
+  by the tag.
 - Pushes to `main` only run tests (`.github/workflows/test.yml`).
 - **Only a pushed tag releases**:
   ```bash

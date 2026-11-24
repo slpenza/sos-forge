@@ -367,6 +367,7 @@ def test_build_site_end_to_end(tmp_path):
     assert d["dates"] == "Spring 2026" and d["sources"] == [] and d["lengths"][0]["default"]
     assert d["slug"] == "tiny" and d["downloads"][0]["url"] == "https://github.com/slpenza/sos-forge/releases/download/v0.1.0/tiny.zip"
     assert json.loads((out / "datasets.json").read_text()) == manifest
+    assert isinstance(json.loads((out / "changes.json").read_text())["versions"], list)
     assert json.loads((out / "config.json").read_text()) == {"askProjects": ["sos"], "askBase": base}
     seen = json.loads((out / "help" / "index.html").read_text())
     assert seen["key"] == "sos" and seen["ask_base"] == base and seen["block"]["layout"] == "desk"

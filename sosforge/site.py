@@ -20,6 +20,7 @@ import tomllib
 import zipfile
 from pathlib import Path
 
+from .changes import visitor_changes
 from .encode import find_ffmpeg
 from .fetch import cache_root, http_request, redirect_location
 from .recipe import RecipeError, check_keys
@@ -544,6 +545,11 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ba
         LOG.info("dataset %s ready", d["slug"])
     manifest = {"datasets": entries}
     (out / "datasets.json").write_text(json.dumps(manifest, indent=1))
+    # What's new: the For visitors lines of every released version (design/v0/v0.5.1.md).
+    changes = visitor_changes(REPO_ROOT, f"https://github.com/{cfg['repo']}/releases/tag/")
+    if not changes:
+        LOG.warning("no released version has a For visitors section (are the v* tags fetched?): What's new is empty")
+    (out / "changes.json").write_text(json.dumps({"versions": changes}, indent=1))
     ask_cfg: dict = {"askProjects": cfg["ask_projects"]}
     if ask_base:
         files = fetch_ask(ask_base, work / "ask", ask_lock_path)

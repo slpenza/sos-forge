@@ -118,3 +118,22 @@ body.sim { display: flex; flex-direction: column; min-height: 100dvh; }
   .sim-layout { grid-template-columns: 1fr; }
   .stage { min-height: 62vh; }
 }
+
+/* What's new (design/v0/v0.5.1.md): the home page's latest lines, and the page listing every version. */
+.whats-new { margin: 0 0 var(--gap); padding: 14px 16px; background: var(--panel); border: 1px solid var(--rule);
+  border-radius: var(--radius); max-width: 860px; }
+.whats-new[hidden] { display: none; }
+.whats-new h2 { font-size: 1rem; margin: 0 0 8px; }
+.whats-new ul, .changes ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.whats-new li, .changes li { color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.whats-new li time { color: var(--faint); font-size: .85rem; margin-right: 4px; white-space: nowrap; }
+.whats-new > a { display: inline-block; margin-top: 10px; color: var(--accent); font-size: .9rem; }
+.kind { display: inline-block; font-size: .75rem; line-height: 1.6; padding: 0 8px; margin-right: 4px; border-radius: 999px;
+  border: 1px solid var(--rule); color: var(--fg); white-space: nowrap; vertical-align: 1px; }
+.changes .change { padding: 18px 0; border-top: 1px solid var(--rule); }
+.changes .change:first-child { border-top: 0; padding-top: 0; }
+.changes h2 { font-size: 1rem; font-weight: 600; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 4px 10px;
+  align-items: baseline; }
+.changes h2 time { color: var(--fg); }
+.changes .ver { color: var(--faint); font-family: var(--mono); font-size: .85rem; }
+.changes a.ver:hover { color: var(--accent); }

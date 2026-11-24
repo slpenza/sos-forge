@@ -14,7 +14,7 @@ import json
 import sys
 import urllib.request
 
-PAGES = ("/", "/simulator.html", "/help/", "/404.html")
+PAGES = ("/", "/simulator.html", "/help/", "/changes.html", "/404.html")
 
 
 def watch(page, origin: str) -> list[str]:
