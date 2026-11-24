@@ -77,6 +77,8 @@ def build_fixture(tmp, config, **build):
     """Build the fixture site (two tiny movies, one with an extra length, the labels style and a source, and a still) from a config. Helper; not itself tested."""
     dist = tmp / "dist"
     make_dataset(dist / "tiny_h264", name="Tiny (H.264)")
+    with (dist / "tiny_h264" / "playlist.sos").open("a") as f:
+        f.write("lastdwell = 3000\n")   # hold the last frame, as SOS does, so the caption's end state lasts long enough to see
     make_dataset(dist / "second_h264", name="Second (H.264)")
     (dist / "still").mkdir()
     cv2.imwrite(str(dist / "still" / "still_256x128.jpg"), np.full((128, 256, 3), 90, np.uint8))
@@ -217,7 +219,7 @@ def test_flat_preview_plays_with_captions(browser, origin):
 
 
 def test_simulator_caption_stays_put(browser, origin):
-    """Checks the simulator shows the dataset's labels as a caption that follows the frames and keeps its place (centre and top; its width follows the text) while the globe is dragged. Covers simulator.js showCaption against a real WebGL sphere; this test is not itself tested."""
+    """Checks the simulator shows the dataset's labels as a caption that follows the frames, keeps its place (centre and top; its width follows the text) while the globe is dragged, and still shows the last frame's label at the end of the movie. Covers simulator.js showCaption against a real WebGL sphere; this test is not itself tested."""
     page, problems = open_page(browser, origin, "/simulator.html?d=tiny")
     caption = page.locator("#caption")
     page.wait_for_function("() => document.getElementById('caption').textContent.startsWith('Frame ')", timeout=15000)
@@ -236,6 +238,14 @@ def test_simulator_caption_stays_put(browser, origin):
     # Wait for the frames to move on rather than sampling during the drag: CI's software WebGL can be slow to start.
     page.wait_for_function("t => document.getElementById('caption').textContent !== t", arg=first, timeout=15000)
     assert caption.inner_text().startswith("Frame ")
+    # The end of the movie, where SOS holds for lastdwell: the caption must keep the last frame's label, not go blank.
+    # A MutationObserver records every blank moment, however brief, instead of polling for one.
+    page.evaluate("""() => { window.blanks = []; const c = document.getElementById('caption');
+        new MutationObserver(() => { if (c.hidden || !c.textContent.trim()) window.blanks.push(c.textContent); })
+          .observe(c, { attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true });
+        const s = document.getElementById('scrub'); s.value = s.max; s.dispatchEvent(new Event('input')); }""")
+    page.wait_for_timeout(1500)
+    assert page.evaluate("() => window.blanks") == []
     assert problems == []
 
 

@@ -2,6 +2,16 @@
 // Pure functions only, so they run the same in the browser and under `node --test site/js/playlist.test.mjs`.
 
 /**
+ * Split labels.txt into one line per frame, dropping the blank lines a trailing newline leaves, so the last frame keeps its label.
+ * Tested by playlist.test.mjs "labels keep the last frame's line".
+ */
+export function parseLabels(text) {
+  const lines = String(text).replace(/\r\n?/g, '\n').split('\n');
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return lines;
+}
+
+/**
  * Parse playlist.sos text into an object of keys, with numbers as numbers and {{ }} descriptions joined into one line.
  * Tested by playlist.test.mjs "parses keys, numbers and a multi-line description".
  */

@@ -1,7 +1,7 @@
 // The SOS simulator page: plays a gallery dataset or a dropped dataset folder on a WebGL sphere, following the
 // playlist the way the sphere does (frame rate, first/last holds, auto-play, spin, tilt). Nothing is uploaded.
 import { Globe, attachControls } from './globe.js';
-import { parsePlaylist, playbackSettings, findDataFile } from './playlist.js';
+import { parsePlaylist, parseLabels, playbackSettings, findDataFile } from './playlist.js';
 import { visitorView } from './sphere-math.js';
 
 const $ = (id) => document.getElementById(id);
@@ -177,7 +177,7 @@ async function openFiles(fileList) {
   const url = URL.createObjectURL(data);
   const isVideo = /\.(mp4|m4v|webm)$/i.test(data.name);
   const lf = files.find((f) => f.name.toLowerCase() === 'labels.txt');
-  const labels = lf ? (await lf.text()).replace(/\r/g, '').split('\n') : [];
+  const labels = lf ? parseLabels(await lf.text()) : [];
   start(settings, url, isVideo, 30, { labels });
   state.urls.push(url);
   $('dataset').value = '';
@@ -198,7 +198,7 @@ async function loadGallery() {
     sel.value = d.slug;
     history.replaceState(null, '', `?d=${encodeURIComponent(d.slug)}`);
     let labels = [];
-    if (d.labels) { try { labels = (await (await fetch(d.labels)).text()).replace(/\r/g, '').split('\n'); } catch { labels = []; } }
+    if (d.labels) { try { labels = parseLabels(await (await fetch(d.labels)).text()); } catch { labels = []; } }
     start(playbackSettings(d.playlist), d.preview, d.kind === 'movie', d.source_fps || 30,
       { credits: d.credits, licences: d.licences, downloads: d.downloads, labels });
   };

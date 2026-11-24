@@ -1,7 +1,14 @@
 // Tests for the simulator's playlist parsing and loop timing. Run: node --test site/js/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePlaylist, playbackSettings, findDataFile } from './playlist.js';
+import { parsePlaylist, parseLabels, playbackSettings, findDataFile } from './playlist.js';
+
+test("labels keep the last frame's line", () => {
+  assert.deepEqual(parseLabels('1820\n1821\n1822\n'), ['1820', '1821', '1822']);
+  assert.deepEqual(parseLabels('a\r\nb\r\n\r\n'), ['a', 'b']);
+  assert.deepEqual(parseLabels('a\n\nb'), ['a', '', 'b']);
+  assert.deepEqual(parseLabels(''), []);
+});
 
 test('parses keys, numbers and a multi-line description', () => {
   const p = parsePlaylist('name = Lunar Phases\r\ndescription = {{ One\n  two }}\nfps = 30\ntiltx = 6.68\n# note\nbad line\n');
