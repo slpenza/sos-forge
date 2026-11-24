@@ -32,19 +32,6 @@ doubling the wait each time. A big recipe like Where the World Plays can take 20
 that the results are kept for 30 days, so rebuilding is instant. If you build often, run your own Overpass
 server and point `SOSFORGE_OVERPASS_URL` at it.
 
-## Pinball Map needs a token
-
-`Pinball Map needs an API token`
-
-Request one at pinballmap.com/api_token. Approval is by hand, so it can take a while. When it arrives, put it in
-a file called `.env.local` next to your recipes:
-
-```
-PINBALLMAP_API_TOKEN=your-token-here
-```
-
-`.env.example` lists every setting the file can hold. `.env.local` never goes into the repository.
-
 ## No activity files found
 
 `no activity files match …`

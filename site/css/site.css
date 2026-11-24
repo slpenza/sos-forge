@@ -40,12 +40,14 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 .5em; }
 
 main { padding: var(--gap); max-width: 1280px; margin: 0 auto; }
 main.narrow { max-width: 860px; }
-.hero { padding: clamp(16px, 4vw, 48px) 0 var(--gap); max-width: 820px; }
+/* The introduction's text keeps a reading width; its row of buttons and the question box may use the page's. */
+.hero { padding: clamp(16px, 4vw, 48px) 0 var(--gap); }
+.hero > h1, .hero > p { max-width: 820px; }
 .hero h1 { font-size: clamp(1.6rem, 3.6vw, 2.6rem); }
 .hero p { color: var(--muted); font-size: 1.05rem; }
 .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 /* The question box: the same cap as Help's (site/help-head.html), so the two match on a wide screen. */
-.cta .home-ask { flex: 1 1 480px; min-width: 0; max-width: 480px; }
+.cta .home-ask { flex: 1 1 720px; min-width: 0; max-width: 720px; }
 
 .grid { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 .card { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }

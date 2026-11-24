@@ -12,7 +12,6 @@ from conftest import gpx_loop, write_recipe
 from sosforge.recipe import RecipeError, load_recipe
 from sosforge.sources import load_source
 from sosforge.sources import overpass as op
-from sosforge.sources import pinballmap as pbm
 from sosforge.sources.base import to_epoch_days
 
 RECIPE = '[dataset]\nname="s"\n[[layers]]\ntype="basemap"\ncolor="#000000"\n'
@@ -93,35 +92,3 @@ def test_overpass_query_parse_and_cache(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="did not return CSV"):
         op.parse_csv(b"<html>502 Gateway Timeout</html>", "q")
     assert "out center;" in op.build_query('nwr["a"="b"];', 60) and "[timeout:60]" in op.build_query("x", 60)
-
-
-def test_pinballmap_token_required(tmp_path, monkeypatch):
-    """Checks a missing token fails with signup instructions and the token is sent only as a header. Covers pinballmap_source token handling with stubbed HTTP; the live API is untested pending a token."""
-    monkeypatch.delenv("PINBALLMAP_API_TOKEN", raising=False)
-    with pytest.raises(RecipeError, match="api_token"):
-        load_source({"type": "pinballmap"}, ctx_for(tmp_path))
-    seen = {}
-
-    def fake(url, params=None, headers=None, **kw):
-        """Record the call and return one location. Helper; not itself tested."""
-        seen.update(url=url, headers=headers, params=params)
-        return json.dumps({"locations": [{"id": 1, "name": "Ground Kontrol", "lat": "45.52", "lon": "-122.67",
-                                          "num_machines": 30, "created_at": "2010-05-01T00:00:00Z"}]}).encode()
-
-    monkeypatch.setenv("PINBALLMAP_API_TOKEN", "secret-token")
-    monkeypatch.setattr(pbm, "http_request", fake)
-    t = load_source({"type": "pinballmap"}, ctx_for(tmp_path))
-    assert seen["headers"]["X-Api-Token"] == "secret-token" and "secret" not in seen["url"]
-    assert len(t) == 1 and t.license == "CC-BY-SA-4.0"
-    cached = list((tmp_path / "cache" / "sources" / "pinballmap").glob("*.key.json"))
-    assert cached and "secret" not in cached[0].read_text()
-
-
-def test_pinballmap_normalises_fields():
-    """Checks alternative field names, machine lists and bad payloads are handled. Covers normalise; this test is not itself tested."""
-    cols = pbm.normalise([{"latitude": 1, "longitude": 2, "machine_names": ["a", "b"]}, {"lat": None, "lon": 3}])
-    assert cols["lat"].tolist() == [1.0] and cols["num_machines"].tolist() == [2.0]
-    with pytest.raises(RuntimeError, match="unexpected"):
-        pbm.normalise({"error": "x"})
-    with pytest.raises(RuntimeError, match="no coordinates"):
-        pbm.normalise([{"x": 1}])

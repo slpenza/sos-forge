@@ -28,7 +28,7 @@ source = { type = "tracks", path = "data/*.gpx", attribution = "My GPS" }
 width_km = 80
 [[layers]]
 type = "points"
-source = { type = "csv", path = "pts.csv", attribution = "Pinball Map (test)" }
+source = { type = "csv", path = "pts.csv", attribution = "Venue survey (test)" }
 [hud]
 title = "{count} activities"
 subtitle = "{distance_km:,.0f} km"
@@ -76,7 +76,7 @@ def test_texture_build_end_to_end(tmp_path):
     assert all(c["passed"] for c in s["checks"]), [c for c in s["checks"] if not c["passed"]]
     img = cv2.imread(s["files"]["data"])
     assert img.shape == (128, 256, 3) and s["files"]["data"].endswith("tiny_texture_256x128.jpg")
-    assert s["credits"][:3] == ["Test credit", "My GPS", "Pinball Map (test)"] and s["licenses"] == ["CC0"]
+    assert s["credits"][:3] == ["Test credit", "My GPS", "Venue survey (test)"] and s["licenses"] == ["CC0"]
     pl = (tmp_path / "dist" / "tiny_texture" / "playlist.sos").read_text()
     assert "data = tiny_texture_256x128.jpg" in pl and "fps" not in pl and "Credits: Test credit; My GPS" in pl
 

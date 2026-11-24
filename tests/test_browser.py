@@ -515,6 +515,6 @@ def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
     assert heading.count() == 1 and heading.evaluate("e => e.getBoundingClientRect().height") <= 1
     # Help's question box is the home page's width on a wide screen (design/v0/v0.5.4.md).
     help_width = page.locator(".ask-panel .ask-askform").evaluate("e => Math.round(e.getBoundingClientRect().width)")
-    assert help_width == home_width == 480, (help_width, home_width)
+    assert help_width == home_width == 720, (help_width, home_width)
     plain, _ = open_page(browser, origin, "/")
     assert plain.locator("#ask-box").count() == 0 and plain.locator('link[href="ask/ask-panel.css"]').count() == 0
