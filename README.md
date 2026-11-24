@@ -31,11 +31,13 @@ README has the exact commands and checksums).
 ## The site and the simulator
 
 `sos site` builds the site behind sos.stevenpenza.com:
-- a gallery of the published datasets
+- a gallery of the published datasets, each card showing its date range and length, and each movie with a play
+  button for its flat preview
 - a **simulator** that plays a dataset on a virtual 6-foot sphere in the browser, following its `playlist.sos`
   (frame rate, holds, spin, tilt). It has Orbit and Visitor views and a fixed caption, and you can drop in a
   dataset folder of your own; nothing is uploaded.
-- the help, built by Ask & Answer, with an Ask panel
+- the help, built by Ask & Answer. A build without an Ask & Answer checkout (a fork, say) still has the gallery
+  and simulator, and its Help links open the docs on GitHub instead
 
 `infra/` deploys it, but only from a pushed version tag (see design/v0/v0.2.0.md).
 

@@ -59,3 +59,4 @@ slug = "tonight_aurora"
 release = "data-2026-11"
 preview = "tonight_aurora_4k.zip"                # a still image, so one zip serves both
 downloads = ["tonight_aurora_4k.zip"]
+dates = "23 Nov 2026, 02:06 UTC"               # the forecast time of this build; movies take theirs from the recipe

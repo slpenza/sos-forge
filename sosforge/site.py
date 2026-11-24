@@ -23,11 +23,12 @@ from pathlib import Path
 from .encode import find_ffmpeg
 from .fetch import cache_root, http_request, redirect_location
 from .recipe import RecipeError, check_keys
+from .timeline import parse_date
 
 LOG = logging.getLogger("sosforge.site")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SITE_KEYS = {"domain", "repo", "ask_release", "ask_projects", "preview_width"}
-DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist"}
+DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist", "dates"}
 STATIC_SKIP = (".test.mjs", "help-head.html", "help-bar.html", "site.toml")
 PANEL_FILES = ("ask-client.js", "ask-panel.js", "ask-panel.css")
 HELP_KEYS = {"release", "bar", "title", "groups", "landing"}
@@ -96,7 +97,8 @@ def load_config(path: Path) -> dict:
             raise RecipeError(f"[[datasets]] {d['slug']}: give release + preview (a zip on that release) or dist (a folder)")
         seen.add(d["slug"])
         cfg["datasets"].append({"slug": d["slug"], "release": d.get("release"), "preview": d.get("preview"),
-                                "downloads": list(d.get("downloads", [])), "dist": d.get("dist")})
+                                "downloads": list(d.get("downloads", [])), "dist": d.get("dist"),
+                                "dates": d.get("dates")})
     return cfg
 
 
@@ -206,8 +208,27 @@ def make_preview(src: Path, out_dir: Path, width: int, ffmpeg: str) -> dict:
     return {"preview": "preview.jpg", "poster": "poster.jpg", **info}
 
 
-def dataset_entry(folder: Path, slug: str, out: Path, width: int, ffmpeg: str, downloads: list[dict]) -> dict:
-    """Turn one dataset folder into its published preview files, labels and datasets.json entry. Tested by test_site.py::test_bundle_and_folder_dataset."""
+def date_label(start, end) -> str:
+    """Return a short label for a dataset's span: whole years ("1820–2022") when it covers two years or more, otherwise day dates. Tested by test_site.py::test_recipe_dates."""
+    a, b = parse_date(start), parse_date(end)
+    if b.year - a.year >= 2:
+        return f"{a.year}–{b.year}"
+    day = lambda d: f"{d.day} {d:%b %Y}"
+    return day(a) if a.date() == b.date() else f"{day(a)} – {day(b)}"
+
+
+def recipe_dates(slug: str, recipes: Path = REPO_ROOT / "recipes") -> str | None:
+    """Return the date label of the recipe named by a dataset's slug from its [animation] start and end, or None when there is no such recipe or span. Tested by test_site.py::test_recipe_dates against the repo's own recipes."""
+    path = recipes / slug / "recipe.toml"
+    if not path.is_file():
+        return None
+    anim = tomllib.loads(path.read_text()).get("animation", {})
+    return date_label(anim["start"], anim["end"]) if anim.get("start") and anim.get("end") else None
+
+
+def dataset_entry(folder: Path, slug: str, out: Path, width: int, ffmpeg: str, downloads: list[dict],
+                  dates: str | None = None) -> dict:
+    """Turn one dataset folder into its published preview files, labels and datasets.json entry, carrying the date label it is given. Tested by test_site.py::test_bundle_and_folder_dataset and test_build_site_end_to_end."""
     playlist_text = (folder / "playlist.sos").read_text()
     pl = parse_playlist(playlist_text)
     media = folder / str(pl.get("data", ""))
@@ -227,7 +248,7 @@ def dataset_entry(folder: Path, slug: str, out: Path, width: int, ffmpeg: str, d
             "preview": f"datasets/{slug}/{facts['preview']}", "poster": f"datasets/{slug}/{facts['poster']}",
             "source_fps": facts.get("fps", pl.get("fps", 30)), "duration_s": facts.get("duration_s", 0),
             "width": facts.get("width"), "height": facts.get("height"), "credits": lists["credits"],
-            "licences": lists["licences"], "downloads": downloads, "labels": labels}
+            "licences": lists["licences"], "downloads": downloads, "labels": labels, "dates": dates}
 
 
 def release_tree(ask_checkout: Path, tag: str, paths: list[str], into: Path) -> Path:
@@ -277,6 +298,21 @@ def ask_release_files(ask_checkout: Path, tag: str, paths: list[str], into: Path
         return ask_checkout
 
 
+HELP_HREF = re.compile(r'href="/?help/"')
+
+
+def point_help_at_docs(out: Path, repo: str) -> int:
+    """Rewrite the site's links to /help/ to the docs on GitHub when the build has no help pages, returning how many links changed. Tested by test_site.py::test_build_site_end_to_end's build without an ask-answer checkout."""
+    url = f"https://github.com/{repo}/blob/main/docs/getting-started.md"
+    changed = 0
+    for page in out.glob("*.html"):
+        text, n = HELP_HREF.subn(f'href="{url}"', page.read_text())
+        if n:
+            page.write_text(text)
+            changed += n
+    return changed
+
+
 def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_checkout: Path | None = None,
                ask_base: str | None = None, strict_ask: bool = False) -> dict:
     """Assemble the whole site into `out` and return the manifest written as datasets.json. Tested by test_site.py::test_build_site_end_to_end."""
@@ -298,7 +334,8 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ch
             folder = Path(d["dist"])
         else:
             folder = unzip_folder(release_asset(cfg["repo"], d["release"], d["preview"]), work / d["slug"])
-        entries.append(dataset_entry(folder, d["slug"], out, cfg["preview_width"], ffmpeg, downloads))
+        entries.append(dataset_entry(folder, d["slug"], out, cfg["preview_width"], ffmpeg, downloads,
+                                     d.get("dates") or recipe_dates(d["slug"])))
         LOG.info("dataset %s ready", d["slug"])
     manifest = {"datasets": entries}
     (out / "datasets.json").write_text(json.dumps(manifest, indent=1))
@@ -315,7 +352,8 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ch
         if ask_base:
             ask_cfg["askBase"] = ask_base.rstrip("/")
     else:
-        LOG.warning("no ask-answer checkout: building without the help pages and the Ask panel")
+        n = point_help_at_docs(out, cfg["repo"])
+        LOG.warning("no ask-answer checkout: building without the help pages; %d Help links point at the docs on GitHub", n)
     (out / "config.json").write_text(json.dumps(ask_cfg, indent=1))
     LOG.info("site built in %s: %d datasets", out, len(entries))
     return manifest

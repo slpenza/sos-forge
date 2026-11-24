@@ -50,6 +50,15 @@ def test_parse_playlist_and_readme():
     assert lists["licences"] == ["Contains OpenStreetMap data (ODbL 1.0)."]
 
 
+def test_recipe_dates():
+    """Checks spans of two years or more read as years, shorter ones as day dates, and recipes without a span or folder give None. Covers date_label and recipe_dates against the repo's recipes; this test is not itself tested."""
+    assert site.date_label("1820-01-01", "2022-01-01") == "1820–2022"
+    assert site.date_label("2026-03-01", "2026-11-23") == "1 Mar 2026 – 23 Nov 2026"
+    assert site.date_label("2026-11-23", "2026-11-23T12:00:00") == "23 Nov 2026"
+    assert site.recipe_dates("getting_richer") == "1820–2022" and site.recipe_dates("cities_growing") == "1975–2030"
+    assert site.recipe_dates("where_the_world_plays") is None and site.recipe_dates("no_such_recipe") is None
+
+
 def test_config_validation(tmp_path):
     """Checks site.toml defaults, and that duplicate slugs, unknown keys and entries without a source are refused. Covers load_config; this test is not itself tested."""
     ok = tmp_path / "ok.toml"
@@ -85,6 +94,7 @@ def test_bundle_and_folder_dataset(tmp_path):
     assert site.media_info(out / entry["preview"], find_ffmpeg())["codec"] == "h264"
     assert entry["credits"][1] == "© OpenStreetMap contributors"
     assert entry["labels"] == "datasets/tiny/labels.txt" and (out / entry["labels"]).read_text().startswith("Frame 0\n")
+    assert entry["dates"] is None
     with pytest.raises(RecipeError, match="H.264 folder"):
         site.dataset_entry(dist / "tiny", "tiny", out, 2048, find_ffmpeg(), [])
     evil = tmp_path / "evil.zip"
@@ -161,7 +171,7 @@ def stand_in_ask_answer(root):
 
 
 def test_build_site_end_to_end(tmp_path):
-    """Checks the site assembles static pages without test or fragment files, one dataset with its preview, the help from the [help] release's corpus.py with the frame added only in its copy of the project, the panel files from ask_release whatever the checkout has out, both from one tag when the pins match, config.json, and that a missing tag fails a strict build. Covers build_site, build_help, release_tree and ask_release_files with a stand-in ask-answer repo; this test is not itself tested."""
+    """Checks the site assembles static pages without test or fragment files, one dataset with its preview, the help from the [help] release's corpus.py with the frame added only in its copy of the project, the panel files from ask_release whatever the checkout has out, both from one tag when the pins match, config.json, no Ask page, Help links pointing at the docs on GitHub in a build without an ask-answer checkout, and that a missing tag fails a strict build. Covers build_site, build_help, release_tree and ask_release_files with a stand-in ask-answer repo; this test is not itself tested."""
     dist = tmp_path / "dist"
     make_dataset(dist / "tiny_h264", name="Tiny (H.264)")
     ask = tmp_path / "ask-answer"
@@ -169,10 +179,11 @@ def test_build_site_end_to_end(tmp_path):
     cfg = tmp_path / "site.toml"
     cfg.write_text('[site]\ndomain="d"\nask_release="v0.18.1"\n[help]\nrelease="v0.19.1"\nbar="./site/help-bar.html"\n'
                    'title={site="S",section="Help"}\n[[help.groups]]\nname="All"\ntopics=["docs/getting-started.md"]\n'
-                   '[[datasets]]\nslug="tiny"\nrelease="v0.1.0"\npreview="tiny_h264.zip"\ndownloads=["tiny.zip"]\n')
+                   '[[datasets]]\nslug="tiny"\nrelease="v0.1.0"\npreview="tiny_h264.zip"\ndownloads=["tiny.zip"]\ndates="Spring 2026"\n')
     out = tmp_path / "out"
     manifest = site.build_site(cfg, out, dist=dist, ask_checkout=ask, ask_base="https://ask.example/prod/", strict_ask=True)
     d = manifest["datasets"][0]
+    assert d["dates"] == "Spring 2026"
     assert d["slug"] == "tiny" and d["downloads"][0]["url"] == "https://github.com/slpenza/sos-forge/releases/download/v0.1.0/tiny.zip"
     assert json.loads((out / "datasets.json").read_text()) == manifest
     assert json.loads((out / "config.json").read_text()) == {"askProjects": ["sos"], "askBase": "https://ask.example/prod"}
@@ -181,11 +192,17 @@ def test_build_site_end_to_end(tmp_path):
     assert {"package.json", "site/help-head.html", "site/help-bar.html", "docs/getting-started.md"} <= set(seen["files"])
     assert "bar" not in json.loads((site.REPO_ROOT / "package.json").read_text())["askAnswer"]
     assert all((out / "ask" / f).read_text() == f"/* {f} v0.18.1 */" for f in site.PANEL_FILES)
-    for page in ("index.html", "simulator.html", "ask.html", "404.html", "js/globe.js", "css/site.css"):
+    for page in ("index.html", "simulator.html", "404.html", "js/globe.js", "css/site.css"):
         assert (out / page).exists(), page
     assert not list(out.rglob("*.test.mjs")) and not (out / "help-head.html").exists() and not (out / "site.toml").exists()
+    assert not (out / "ask.html").exists() and not any('ask.html' in f.read_text() for f in out.glob("*.html"))
     bare = site.build_site(cfg, tmp_path / "bare", dist=dist)
     assert bare["datasets"] and json.loads((tmp_path / "bare" / "config.json").read_text()) == {"askProjects": ["sos"]}
+    docs = 'href="https://github.com/slpenza/sos-forge/blob/main/docs/getting-started.md"'
+    for page, links in (("index.html", 2), ("simulator.html", 1), ("404.html", 1)):
+        text = (tmp_path / "bare" / page).read_text()
+        assert text.count(docs) == links and 'help/"' not in text, page
+    assert 'href="help/"' in (out / "index.html").read_text() and docs not in (out / "index.html").read_text()
     same = tmp_path / "same.toml"
     same.write_text(cfg.read_text().replace('[help]\nrelease="v0.19.1"', '[help]').replace('ask_release="v0.18.1"', 'ask_release="v0.19.1"'))
     assert site.load_config(same)["help_release"] == "v0.19.1"
