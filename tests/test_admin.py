@@ -114,6 +114,34 @@ def test_admin_files_drafts_sends_and_records(setup):
     assert [m["key"] for m in st["datasets"][0]["thread"]] == ["mail/sos/1", "mail/sos/2"] and st["unfiled"] == []
 
 
+def test_suggestion_switch(tmp_path):
+    """Checks the switch for where the site's suggestions go: state shows the current one with both deployed addresses, "test" is refused while no test address is deployed and any value but mailbox or test is refused, a switch writes the setting and returns the new state, and a failure to read it shows as unavailable rather than a guess. Covers Admin.suggest_state and set_destination with fake ports; the aws CLI ports are exercised by sos admin, and the Lambda's reading by infra/test/suggest.test.mjs."""
+    (tmp_path / "site.toml").write_text(SITE)
+    cfg = Config(address="sos@example.org", name="Pat", bucket="b", prefix="mail/sos/", domain="sos.example.org",
+                 site_toml=tmp_path / "site.toml")
+    box = {"destination": "mailbox", "targets": {"mailbox": "sos@example.org", "test": None}}
+    fake = Fake()
+    ports = fake.ports()
+    ports.suggest_targets = lambda: dict(box["targets"])
+    ports.destination = lambda: box["destination"]
+    ports.set_destination = lambda value: box.update(destination=value)
+    admin = Admin(cfg, ports)
+    assert admin.state()["suggest"] == {"destination": "mailbox", "mailbox": "sos@example.org", "test": None}
+    with pytest.raises(ValueError, match="SOS_SUGGEST_TEST"):
+        admin.set_destination("test")
+    with pytest.raises(ValueError, match="mailbox, test"):
+        admin.set_destination("anywhere")
+    assert box["destination"] == "mailbox"
+    box["targets"]["test"] = "tester@example.net"
+    assert admin.set_destination("test") == {"destination": "test", "mailbox": "sos@example.org", "test": "tester@example.net"}
+    assert admin.set_destination("mailbox")["destination"] == "mailbox"
+
+    def broken():
+        raise RecipeError("no deployed Suggest Lambda found")
+    ports.suggest_targets = broken
+    assert admin.state()["suggest"] == {"unavailable": "no deployed Suggest Lambda found"}
+
+
 def call(port, method, path, *, token=None, host=None, origin=None, body=None):
     """Make one request to the admin server with chosen Host, Origin and token headers, returning (status, json-or-text). Helper for test_server_refuses_other_origins_and_tokens; not itself tested."""
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
@@ -136,7 +164,7 @@ def call(port, method, path, *, token=None, host=None, origin=None, body=None):
 
 
 def test_server_refuses_other_origins_and_tokens(setup):
-    """Checks the server answers only local requests: the page carries this run's token; the API refuses a missing or wrong token, another site's Origin, and a foreign Host (DNS rebinding); a send while mail isn't stored is a 409 that sends nothing; unknown paths are 404. Covers serve and handler; a real browser's behaviour is not tested."""
+    """Checks the server answers only local requests: the page carries this run's token; the API refuses a missing or wrong token, another site's Origin, and a foreign Host (DNS rebinding); a send while mail isn't stored is a 409 that sends nothing; the suggestion switch needs the token and refuses a test address that isn't deployed; unknown paths are 404. Covers serve and handler; a real browser's behaviour is not tested."""
     admin, fake = setup
     srv = serve(admin, 0)
     port, token = srv.server_address[1], srv.token
@@ -158,6 +186,10 @@ def test_server_refuses_other_origins_and_tokens(setup):
         assert status == 409 and "nothing was sent" in err["error"] and fake.sent == []
         assert call(port, "POST", "/api/catalog", token=token, body={"slug": "gr", "url": "https://x.example/"})[0] == 400
         assert call(port, "POST", "/api/nope", token=token, body={})[0] == 404
+        assert call(port, "POST", "/api/suggest-to", token=token, body={"destination": "test"})[0] == 400
+        status, switched = call(port, "POST", "/api/suggest-to", token=token, body={"destination": "mailbox"})
+        assert status == 200 and switched["destination"] == "mailbox"
+        assert call(port, "POST", "/api/suggest-to", body={"destination": "mailbox"})[0] == 403
         assert urllib.request.urlopen(f"http://127.0.0.1:{port}/").status == 200
     finally:
         srv.shutdown()

@@ -38,6 +38,10 @@
   .error { color: var(--warn); margin: 8px 0 0; }
   .note { color: var(--ok); margin: 8px 0 0; }
   a { color: var(--accent); }
+  .switch { margin: 0 0 16px; }
+  .switch .choice { display: flex; gap: 8px; align-items: baseline; margin: 4px 0; overflow-wrap: anywhere; }
+  .switch .choice.on { font-weight: 600; }
+  .switch .confirm { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 </style>
 </head>
 <body>
@@ -48,6 +52,7 @@
 </header>
 <main>
   <p class="banner" id="banner" hidden></p>
+  <section id="switch" class="switch"><h2>Suggestions from the site go to</h2><div id="switch-body" class="muted">Loading…</div></section>
   <div class="grid" id="grid"><p class="muted">Loading…</p></div>
   <section id="suggestions" hidden><h2>Suggestions from the site</h2><ul class="thread" id="suggestions-list"></ul></section>
   <section id="unfiled" hidden><h2>Mail that names no dataset</h2><ul class="thread" id="unfiled-list"></ul></section>
@@ -149,6 +154,36 @@ function settle(slug, had, tries = 6) {
   }, 10000);
 }
 
+// Where the site's suggestions go (design/v0/v0.7.2.md): the current one in bold, and a switch that asks to be confirmed.
+function renderSwitch(s) {
+  const box = document.getElementById('switch-body');
+  if (!s || s.unavailable) { box.replaceChildren(el('p', 'error', s ? s.unavailable : 'not read')); return; }
+  const choices = [['mailbox', s.mailbox, 'kept with NOAA mail, filed below'], ['test', s.test, 'for testing']];
+  const rows = choices.map(([key, address, why]) => {
+    const row = el('div', 'choice' + (s.destination === key ? ' on' : ''));
+    row.append(el('span', '', s.destination === key ? '\u25CF' : '\u25CB'), el('span', '', address || 'no test address deployed'),
+      el('span', 'muted', `\u2014 ${why}`));
+    return row;
+  });
+  const other = s.destination === 'test' ? 'mailbox' : 'test';
+  const target = other === 'test' ? s.test : s.mailbox;
+  const actions = el('div', 'confirm');
+  const ask = el('button', 'primary', `Switch to ${target || 'the test address'}`);
+  ask.disabled = !target;
+  ask.addEventListener('click', () => {
+    const yes = el('button', 'primary', 'Confirm'), no = el('button', '', 'Cancel');
+    actions.replaceChildren(el('span', '', `Send suggestions to ${target} from now on?`), yes, no);
+    no.addEventListener('click', () => renderSwitch(s));
+    yes.addEventListener('click', async () => {
+      yes.disabled = true;
+      try { renderSwitch(await api('/api/suggest-to', { destination: other })); }
+      catch (e) { actions.replaceChildren(el('p', 'error', e.message)); }
+    });
+  });
+  actions.append(ask, el('span', 'muted', 'It takes effect within a minute.'));
+  box.replaceChildren(...rows, actions);
+}
+
 async function load() {
   try {
     state = await api('/api/state');
@@ -160,6 +195,7 @@ async function load() {
   const banner = document.getElementById('banner');
   banner.hidden = state.ready;
   banner.textContent = `Mail to ${state.sender} isn't being stored yet, so a reply from NOAA would be lost. Sending is off until it is.`;
+  renderSwitch(state.suggest);
   document.getElementById('grid').replaceChildren(...state.datasets.map(section));
   document.getElementById('suggestions').hidden = !(state.suggestions || []).length;
   document.getElementById('suggestions-list').replaceChildren(...(state.suggestions || []).map(mail));

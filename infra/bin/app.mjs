@@ -6,15 +6,15 @@
 //   SOS_ZONE_ID        Route 53 zone ID for stevenpenza.com; without it the zone is looked up by name
 //   SOSFORGE_STATUS_BUCKET  optional: stevenpenza.com's private dashboard bucket; with it, the stack publishes
 //                      status/sos.json there every five minutes (design/v0/v0.7.0.md)
-//   SOSFORGE_SUGGEST_TO  optional: where Suggest a dataset sends, instead of sos@stevenpenza.com (a test address,
-//                      kept out of the public repo; design/v0/v0.6.1.md)
+//   SOSFORGE_SUGGEST_TEST  optional: a test address Suggest a dataset may send to instead of sos@stevenpenza.com, when
+//                      the sos admin page's switch says so (design/v0/v0.7.2.md); kept out of the public repo
 import * as cdk from 'aws-cdk-lib';
 import { fileURLToPath } from 'node:url';
 import { SiteStack } from '../lib/site-stack.mjs';
 
-const suggestTo = (process.env.SOSFORGE_SUGGEST_TO || '').trim() || 'sos@stevenpenza.com';
-if (!/^[^@\s<>]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(suggestTo)) {
-  throw new Error('SOSFORGE_SUGGEST_TO is not an email address');
+const suggestTest = (process.env.SOSFORGE_SUGGEST_TEST || '').trim();
+if (suggestTest && !/^[^@\s<>]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(suggestTest)) {
+  throw new Error('SOSFORGE_SUGGEST_TEST is not an email address');
 }
 const statusBucket = (process.env.SOSFORGE_STATUS_BUCKET || '').trim();
 if (statusBucket && !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(statusBucket)) {
@@ -30,7 +30,7 @@ new SiteStack(app, 'SosForgeSite', {
   siteDir: process.env.SOSFORGE_SITE_DIR || fileURLToPath(new URL('../../build/site', import.meta.url)),
   askBase: process.env.SOSFORGE_ASK_BASE || '',
   // Suggest a dataset (design/v0/v0.6.0.md): sent from its own address to the one the NOAA admin page reads.
-  suggest: { from: 'sos-suggest@stevenpenza.com', to: suggestTo },
+  suggest: { from: 'sos-suggest@stevenpenza.com', to: 'sos@stevenpenza.com', test: suggestTest || undefined },
   statusBucket: statusBucket || undefined,
   description: 'sos.stevenpenza.com: the sos-forge gallery, simulator, help and Ask (github.com/slpenza/sos-forge)',
 });

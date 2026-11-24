@@ -46,7 +46,8 @@ README has the exact commands and checksums).
 
 - **Suggest a dataset,** a form that sends a link, its licence and what it would show to the maintainer's mailbox
   through a small API on the site's own address (`infra/lambda/suggest`), behind a honeypot and rate limits
-  (design/v0/v0.6.0.md)
+  (design/v0/v0.6.0.md; `sos admin` switches whether they go there or to a
+  test address, design/v0/v0.7.2.md)
 
 - **Anonymous counts** of page views and Download clicks, with no cookie or identifier, when `[site] count` is on.
   Every five minutes a Lambda publishes them as `status/sos.json` for stevenpenza.com's dashboard, when the production

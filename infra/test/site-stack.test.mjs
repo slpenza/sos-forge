@@ -11,13 +11,13 @@ import { SiteStack, csp, originOf } from '../lib/site-stack.mjs';
 /**
  * Synthesize the stack against a temporary site folder with a fixed zone and account. Test helper; not itself tested.
  */
-function synth(askBase = 'https://ask.example.com/prod', statusBucket = undefined) {
+function synth(askBase = 'https://ask.example.com/prod', statusBucket = undefined, test = undefined) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sos-site-'));
   fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>t</title>');
   const app = new cdk.App({ context: { '@aws-cdk/core:bootstrapQualifier': 'sos1' } });
   const stack = new SiteStack(app, 'SosForgeSite', {
     env: { account: '123456789012', region: 'us-east-1' }, domain: 'sos.stevenpenza.com', zoneName: 'stevenpenza.com',
-    zoneId: 'Z0000000000000', siteDir: dir, askBase, suggest: { from: 'sos-suggest@stevenpenza.com', to: 'sos@stevenpenza.com' },
+    zoneId: 'Z0000000000000', siteDir: dir, askBase, suggest: { from: 'sos-suggest@stevenpenza.com', to: 'sos@stevenpenza.com', test },
     statusBucket,
   });
   return Template.fromStack(stack);
@@ -138,4 +138,22 @@ test('counts: an anonymous counter on its own route, and a status publisher only
   const get = statements.filter((st) => [].concat(st.Action).includes('s3:GetObject') && JSON.stringify(st.Resource).includes('datasets.json'));
   assert.equal(get.length, 1, 'it reads only the gallery manifest from the site bucket');
   assert.ok(statements.some((st) => [].concat(st.Action).includes('dynamodb:BatchGetItem')));
+});
+
+test('the destination switch: the Lambda reads one parameter and may send to the mailbox or, when deployed, a test address', () => {
+  const ses = (tpl) => Object.values(tpl.findResources('AWS::IAM::Policy')).map((p) => p.Properties.PolicyDocument.Statement).flat()
+    .find((st) => [].concat(st.Action).includes('ses:SendRawEmail'));
+  const plain = synth();
+  assert.deepEqual(ses(plain).Condition['ForAllValues:StringEquals']['ses:Recipients'], ['sos@stevenpenza.com']);
+  const fn = (tpl) => Object.values(tpl.findResources('AWS::Lambda::Function')).find((f) => f.Properties.Environment?.Variables?.TO_ADDRESS);
+  assert.equal(fn(plain).Properties.Environment.Variables.TEST_ADDRESS, undefined);
+  assert.equal(fn(plain).Properties.Environment.Variables.DESTINATION_PARAM, '/sosforge/suggest/destination');
+  const withTest = synth(undefined, undefined, 'tester@example.net');
+  assert.deepEqual(ses(withTest).Condition['ForAllValues:StringEquals']['ses:Recipients'], ['sos@stevenpenza.com', 'tester@example.net']);
+  assert.equal(fn(withTest).Properties.Environment.Variables.TEST_ADDRESS, 'tester@example.net');
+  const ssm = Object.values(withTest.findResources('AWS::IAM::Policy')).map((p) => p.Properties.PolicyDocument.Statement).flat()
+    .filter((st) => [].concat(st.Action).some((a) => a.startsWith('ssm:')));
+  assert.equal(ssm.length, 1);
+  assert.deepEqual([].concat(ssm[0].Action), ['ssm:GetParameter'], 'it reads the switch and can never change it');
+  assert.match(JSON.stringify(ssm[0].Resource), /parameter\/sosforge\/suggest\/destination/);
 });

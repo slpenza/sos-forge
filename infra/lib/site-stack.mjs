@@ -133,7 +133,9 @@ export class SiteStack extends cdk.Stack {
   /**
    * Define the site's API: Suggest a dataset (design/v0/v0.6.0.md), a Lambda that may only send from `from` to `to` through the zone's SES identity, and the anonymous counter (v0.7.0), each throttled per route, with the limits table, the salt and the counts table they share. Returns {api, counts}. Tested by site-stack.test.mjs "suggestions" and "counts" against the template; the Lambdas' rules by suggest.test.mjs and metrics.test.mjs.
    */
-  suggestApi(zoneName, siteOrigin, { from, to }) {
+  suggestApi(zoneName, siteOrigin, { from, to, test }) {
+    // The switch the sos admin page sets (design/v0/v0.7.2.md): "mailbox" or "test". The page creates it; missing means the mailbox.
+    const destinationParam = '/sosforge/suggest/destination';
     // The site's anonymous counts (design/v0/v0.7.0.md): daily rows expire after 400 days; all-time totals are kept,
     // and so is the table if the stack is ever replaced.
     const counts = new dynamodb.Table(this, 'SiteCounts', {
@@ -163,15 +165,18 @@ export class SiteStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(10),
       logGroup: new logs.LogGroup(this, 'SuggestLogs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy: cdk.RemovalPolicy.DESTROY }),
       environment: { FROM_ADDRESS: from, TO_ADDRESS: to, SITE_ORIGIN: siteOrigin, TABLE_NAME: table.tableName,
-        SALT_SECRET_ARN: salt.secretArn, PER_HOUR: '3', PER_DAY: '25', MIN_FILL_MS: '3000', COUNTS_TABLE: counts.tableName },
+        SALT_SECRET_ARN: salt.secretArn, PER_HOUR: '3', PER_DAY: '25', MIN_FILL_MS: '3000', COUNTS_TABLE: counts.tableName,
+        DESTINATION_PARAM: destinationParam, ...(test ? { TEST_ADDRESS: test } : {}) },
     });
     fn.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:UpdateItem'], resources: [table.tableArn, counts.tableArn] }));
     salt.grantRead(fn);
     fn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ses:SendEmail', 'ses:SendRawEmail'],
       resources: [`arn:aws:ses:${this.region}:${this.account}:identity/${zoneName}`],
-      conditions: { StringEquals: { 'ses:FromAddress': from }, 'ForAllValues:StringEquals': { 'ses:Recipients': [to] } },
+      conditions: { StringEquals: { 'ses:FromAddress': from }, 'ForAllValues:StringEquals': { 'ses:Recipients': test ? [to, test] : [to] } },
     }));
+    fn.addToRolePolicy(new iam.PolicyStatement({ actions: ['ssm:GetParameter'],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${destinationParam}`] }));
     const hit = new lambda.Function(this, 'Hit', {
       description: 'sos-forge: POST /api/hit, one anonymous page view or download added to the site counts',
       runtime: lambda.Runtime.NODEJS_24_X,

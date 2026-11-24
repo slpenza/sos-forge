@@ -102,6 +102,13 @@ export function rawMessage(s, { from, to, site, now }) {
 }
 
 /**
+ * Return the address a suggestion goes to: the test address when the switch (design/v0/v0.7.2.md) says test and one was deployed, otherwise the mailbox. Tested by suggest.test.mjs "the switch picks the mailbox or the test address".
+ */
+export function recipient(cfg, destination) {
+  return destination === 'test' && cfg.test ? cfg.test : cfg.to;
+}
+
+/**
  * Return the handler for POST /api/suggest over ports {salt(), limit(key, max, ttlSeconds) -> bool, send(raw, from, to) -> id} and settings {from, to, site, perHour, perDay, minFillMs, now()}: a bot gets a silent 200, a bad field a 400, a limit a 429 and a send failure a 502, and only a valid suggestion within its limits is sent. Tested by suggest.test.mjs with fake ports.
  */
 export function makeHandler(ports, cfg) {
@@ -135,8 +142,14 @@ export function makeHandler(ports, cfg) {
       console.log('suggest: daily limit');
       return reply(429, { error: 'We’ve had all the suggestions we can take today. Please try again tomorrow.' });
     }
+    // Where it goes is read now, not at deploy: the sos admin page switches it. A switch that can't be read means the mailbox.
+    const destination = ports.destination ? await ports.destination().catch((err) => {
+      console.error('suggest: switch unreadable, using the mailbox', err?.name || err);
+      return 'mailbox';
+    }) : 'mailbox';
+    const to = recipient(cfg, destination);
     try {
-      await ports.send(rawMessage(s, { ...cfg, now }), cfg.from, cfg.to);
+      await ports.send(rawMessage(s, { ...cfg, to, now }), cfg.from, to);
     } catch (err) {
       console.error('suggest: send failed', err?.name || err);
       return reply(502, { error: 'Your suggestion couldn’t be sent. Please try again later.' });
@@ -153,13 +166,15 @@ export function makeHandler(ports, cfg) {
 const NY_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 
 /**
- * Return the AWS ports: the salt from Secrets Manager (read once per container), a conditional DynamoDB counter with a TTL, SES v2's raw send, and, when the stack gives a counts table, the day's suggestion count. Exercised after a deploy; not unit tested.
+ * Return the AWS ports: the salt from Secrets Manager (read once per container), a conditional DynamoDB counter with a TTL, the destination switch from SSM, SES v2's raw send, and, when the stack gives a counts table, the day's suggestion count. Exercised after a deploy; not unit tested.
  */
 async function awsPorts(env) {
-  const [{ DynamoDBClient, UpdateItemCommand }, { SESv2Client, SendEmailCommand }, { SecretsManagerClient, GetSecretValueCommand }] =
-    await Promise.all([import('@aws-sdk/client-dynamodb'), import('@aws-sdk/client-sesv2'), import('@aws-sdk/client-secrets-manager')]);
-  const db = new DynamoDBClient({}), ses = new SESv2Client({}), secrets = new SecretsManagerClient({});
+  const [{ DynamoDBClient, UpdateItemCommand }, { SESv2Client, SendEmailCommand }, { SecretsManagerClient, GetSecretValueCommand },
+    { SSMClient, GetParameterCommand }] = await Promise.all([import('@aws-sdk/client-dynamodb'), import('@aws-sdk/client-sesv2'),
+    import('@aws-sdk/client-secrets-manager'), import('@aws-sdk/client-ssm')]);
+  const db = new DynamoDBClient({}), ses = new SESv2Client({}), secrets = new SecretsManagerClient({}), ssm = new SSMClient({});
   let salt;
+  let switched = { at: 0, value: 'mailbox' };
   return {
     salt: async () => (salt ??= (await secrets.send(new GetSecretValueCommand({ SecretId: env.SALT_SECRET_ARN }))).SecretString),
     limit: async (key, max, ttlSeconds) => {
@@ -176,6 +191,18 @@ async function awsPorts(env) {
         if (err?.name === 'ConditionalCheckFailedException') return false;
         throw err;
       }
+    },
+    // The switch, read at most once a minute per container; missing means the mailbox.
+    destination: async () => {
+      if (Date.now() - switched.at < 60000) return switched.value;
+      let value = 'mailbox';
+      try {
+        value = (await ssm.send(new GetParameterCommand({ Name: env.DESTINATION_PARAM }))).Parameter.Value;
+      } catch (err) {
+        if (err?.name !== 'ParameterNotFound') throw err;
+      }
+      switched = { at: Date.now(), value };
+      return value;
     },
     send: async (raw, from, to) => (await ses.send(new SendEmailCommand({
       FromEmailAddress: from, Destination: { ToAddresses: [to] }, Content: { Raw: { Data: Buffer.from(raw) } },
@@ -199,7 +226,7 @@ export async function handler(event) {
   if (!real) {
     const env = process.env;
     real = makeHandler(await awsPorts(env), {
-      from: env.FROM_ADDRESS, to: env.TO_ADDRESS, site: env.SITE_ORIGIN, perHour: Number(env.PER_HOUR),
+      from: env.FROM_ADDRESS, to: env.TO_ADDRESS, test: env.TEST_ADDRESS || '', site: env.SITE_ORIGIN, perHour: Number(env.PER_HOUR),
       perDay: Number(env.PER_DAY), minFillMs: Number(env.MIN_FILL_MS), now: () => Date.now(),
     });
   }

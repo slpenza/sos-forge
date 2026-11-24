@@ -1,7 +1,7 @@
 // Tests for the Suggest a dataset Lambda (infra/lambda/suggest/index.mjs), with fake ports. Run: cd infra && npm test
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LICENCES, makeHandler, rawMessage, validate, viewerIp, visitorKey } from '../lambda/suggest/index.mjs';
+import { LICENCES, makeHandler, rawMessage, recipient, validate, viewerIp, visitorKey } from '../lambda/suggest/index.mjs';
 
 const T0 = Date.UTC(2026, 10, 24, 20, 0, 0);
 const GOOD = { url: 'https://data.example.org/quakes.csv', licence: 'CC BY 4.0', shows: 'Earthquakes since 1900, by size.',
@@ -134,6 +134,25 @@ test('a sent suggestion is counted once, and a count that fails doesn\'t fail it
   assert.deepEqual(counted, [T0]);
   f.ports.count = async () => { throw new Error('table down'); };
   assert.equal((await makeHandler(f.ports, CFG)(event(GOOD, { ip: '203.0.113.30' }))).statusCode, 200);
+});
+
+test('the switch picks the mailbox or the test address, and anything else is the mailbox', async () => {
+  const cfg = { ...CFG, test: 'tester@example.net' };
+  assert.equal(recipient(cfg, 'test'), 'tester@example.net');
+  assert.equal(recipient(cfg, 'mailbox'), 'sos@example.org');
+  assert.equal(recipient({ ...CFG, test: '' }, 'test'), 'sos@example.org', 'no test address deployed');
+  assert.equal(recipient(cfg, 'nonsense'), 'sos@example.org');
+  for (const [destination, to] of [['test', 'tester@example.net'], ['mailbox', 'sos@example.org']]) {
+    const f = fakes();
+    f.ports.destination = async () => destination;
+    await makeHandler(f.ports, cfg)(event(GOOD));
+    assert.equal(f.sent[0].to, to);
+    assert.match(f.sent[0].raw, new RegExp(`^To: ${to.replace('.', '\\.')}$`, 'm'), 'the header names the same address');
+  }
+  const broken = fakes();
+  broken.ports.destination = async () => { throw new Error('ssm down'); };
+  assert.equal((await makeHandler(broken.ports, cfg)(event(GOOD))).statusCode, 200);
+  assert.equal(broken.sent[0].to, 'sos@example.org', 'an unreadable switch means the mailbox');
 });
 
 test('a send that fails says so and is not retried', async () => {

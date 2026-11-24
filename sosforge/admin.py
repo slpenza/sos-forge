@@ -53,6 +53,10 @@ class Ports:
     get_mail: Callable[[str], bytes]
     send: Callable[[bytes, str, list[str], list[str]], str]
     inbound_ready: Callable[[str], bool]
+    # Where the site's suggestions go (design/v0/v0.7.2.md): the addresses the deployed Lambda may use, and the switch.
+    suggest_targets: Callable[[], dict] = lambda: {"mailbox": None, "test": None}
+    destination: Callable[[], str] = lambda: "mailbox"
+    set_destination: Callable[[str], None] = lambda value: None
 
 
 def load_config(site_toml: Path, env: dict | None = None) -> Config:
@@ -128,7 +132,31 @@ def aws_ports(cfg: Config) -> Ports:
         return rule_stores(json.loads(aws("ses", "describe-active-receipt-rule-set", "--output", "json") or "{}"),
                            address, cfg.bucket, cfg.prefix)
 
-    return Ports(manifest, list_mail, get_mail, send, inbound_ready)
+    def suggest_targets() -> dict:
+        found = json.loads(aws("lambda", "list-functions", "--query",
+                               "Functions[?starts_with(FunctionName, 'SosForgeSite-Suggest')].Environment.Variables",
+                               "--output", "json") or "[]")
+        env = next((e for e in found if e and e.get("TO_ADDRESS")), None)
+        if env is None:
+            raise RecipeError("no deployed Suggest Lambda found (SosForgeSite-Suggest…)")
+        return {"mailbox": env["TO_ADDRESS"], "test": env.get("TEST_ADDRESS") or None}
+
+    def destination() -> str:
+        try:
+            return aws("ssm", "get-parameter", "--name", DESTINATION_PARAM, "--query", "Parameter.Value", "--output", "text").strip()
+        except RecipeError as exc:
+            if "ParameterNotFound" in str(exc):
+                return "mailbox"
+            raise
+
+    def set_destination(value: str) -> None:
+        aws("ssm", "put-parameter", "--name", DESTINATION_PARAM, "--type", "String", "--value", value, "--overwrite")
+
+    return Ports(manifest, list_mail, get_mail, send, inbound_ready, suggest_targets, destination, set_destination)
+
+
+DESTINATION_PARAM = "/sosforge/suggest/destination"   # read by infra/lambda/suggest at send time (design/v0/v0.7.2.md)
+DESTINATIONS = ("mailbox", "test")
 
 
 def catalogs(site_toml: Path) -> dict:
@@ -162,7 +190,23 @@ class Admin:
                 "datasets": [{"slug": d["slug"], "name": d["name"], "catalog": cats.get(d["slug"]),
                               "status": noaa.status(filed[d["slug"]], cats.get(d["slug"])), "thread": filed[d["slug"]]}
                              for d in datasets],
-                "suggestions": filed[noaa.SUGGESTIONS][::-1], "unfiled": filed[""]}
+                "suggestions": filed[noaa.SUGGESTIONS][::-1], "unfiled": filed[""], "suggest": self.suggest_state()}
+
+    def suggest_state(self) -> dict:
+        """Return where the site's suggestions go now, {destination, mailbox, test}, or {unavailable} naming why it couldn't be read. Tested by test_admin.py::test_suggestion_switch."""
+        try:
+            return {"destination": self.ports.destination(), **self.ports.suggest_targets()}
+        except RecipeError as exc:
+            return {"unavailable": str(exc)}
+
+    def set_destination(self, value: str) -> dict:
+        """Switch where the site's suggestions go, "mailbox" or "test", refusing a test address that isn't deployed, and return the new state. Tested by test_admin.py::test_suggestion_switch."""
+        if value not in DESTINATIONS:
+            raise ValueError(f"suggestions go to one of {', '.join(DESTINATIONS)}")
+        if value == "test" and not self.ports.suggest_targets().get("test"):
+            raise ValueError("no test address is deployed: set the production variable SOS_SUGGEST_TEST, then release")
+        self.ports.set_destination(value)
+        return self.suggest_state()
 
     def draft(self, slug: str) -> dict:
         """Return the email to write next for a dataset: the submission when nothing has been sent, otherwise a reply to the latest message in its thread. Tested by test_admin.py::test_admin_files_drafts_sends_and_records."""
@@ -249,6 +293,7 @@ def handler(admin: Admin, token: str, port_of: Callable[[], int]) -> type:
                 "/api/send": lambda: {"message_id": admin.send(body.get("slug", ""), body.get("subject", ""),
                                                                body.get("body", ""), body.get("reply"))},
                 "/api/catalog": lambda: admin.record_catalog(body.get("slug", ""), body.get("url", "")) or {"ok": True},
+                "/api/suggest-to": lambda: admin.set_destination(body.get("destination", "")),
             }
             if self.path not in actions:
                 return self.reply(404, {"error": "not found"})

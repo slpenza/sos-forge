@@ -11,8 +11,8 @@
 #   vars.SOS_ZONE_ID          optional: the stevenpenza.com zone ID, which skips a lookup
 #   vars.SOS_STATUS_BUCKET    stevenpenza.com's private dashboard bucket, where the stack publishes status/sos.json
 #                             (design/v0/v0.7.0.md); its name stays out of the public repo
-#   vars.SOS_SUGGEST_TO       optional: where Suggest a dataset sends instead of sos@stevenpenza.com, such as a test
-#                             address; it stays out of the public repo (design/v0/v0.6.1.md)
+#   vars.SOS_SUGGEST_TEST     optional: a test address Suggest a dataset may send to instead of sos@stevenpenza.com,
+#                             chosen by the sos admin page's switch (design/v0/v0.7.2.md); out of the public repo
 #   secrets.ASK_UPLOAD_KEY    sos's Ask & Answer upload key: each release uploads the help docs it committed
 #                             (design/v0/v0.4.10.md). The build fetches the release ask.lock.json pins from
 #                             site/site.toml's ask_base and checks every file against the lock (design/v0/v0.4.2.md).
@@ -74,7 +74,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOS_ZONE_ID: ${{ vars.SOS_ZONE_ID }}
           ASK_UPLOAD_KEY: ${{ secrets.ASK_UPLOAD_KEY }}
-          SOSFORGE_SUGGEST_TO: ${{ vars.SOS_SUGGEST_TO }}
+          SOSFORGE_SUGGEST_TEST: ${{ vars.SOS_SUGGEST_TEST }}
           SOSFORGE_STATUS_BUCKET: ${{ vars.SOS_STATUS_BUCKET }}
         run: ./tools/release.sh
 
