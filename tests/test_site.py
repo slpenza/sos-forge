@@ -253,10 +253,14 @@ def test_release_assets_are_fetched_and_cached(monkeypatch):
         site.release_asset("o/r", "v0.1.0", "other.zip")
 
 
-STAND_IN_CORPUS = """import json, pathlib, sys, urllib.request
+STAND_IN_CORPUS = """import json, os, pathlib, sys, urllib.request
 args = sys.argv
 opt = lambda name: args[args.index(name) + 1] if name in args else None
 project = pathlib.Path(opt('--project'))
+if '--upload' in args:
+    (project / 'uploaded.json').write_text(json.dumps({'base': opt('--upload'), 'key_env': opt('--key-env'),
+                                                       'key': os.environ.get(opt('--key-env'))}))
+    sys.exit(0)
 if '--fetch' in args:
     lock = json.loads((project / 'ask.lock.json').read_text())
     into = pathlib.Path(opt('--into'))
@@ -313,6 +317,28 @@ def test_fetch_ask_checks_the_lock(tmp_path):
         lock.write_text(json.dumps({"release": "v9.9.9", "files": {"corpus.py": "sha384-x"}}))
         with pytest.raises(RecipeError, match="ask-client.js"):
             site.ask_lock(lock)
+    finally:
+        server.shutdown()
+
+
+def test_upload_help_uses_the_pinned_corpus(tmp_path, monkeypatch):
+    """Checks the help upload refuses to run without $ASK_UPLOAD_KEY, then runs the pinned corpus.py (checked against ask.lock.json) with --upload to the base without its trailing slash and --key-env naming the variable, so the key reaches it through the environment and never the command line; a changed corpus.py is refused before anything is uploaded. Covers upload_help with a stand-in API; the real upload is exercised by tools/release.sh."""
+    base, lock, server = stand_in_api(tmp_path / "api")
+    record = lock.parent / "uploaded.json"
+    try:
+        monkeypatch.delenv("ASK_UPLOAD_KEY", raising=False)
+        with pytest.raises(RecipeError, match=r"\$ASK_UPLOAD_KEY is not set"):
+            site.upload_help(base + "/", lock)
+        assert not record.exists()
+        monkeypatch.setenv("ASK_UPLOAD_KEY", "test-key-not-real")
+        site.upload_help(base + "/", lock)
+        assert json.loads(record.read_text()) == {"base": base, "key_env": "ASK_UPLOAD_KEY", "key": "test-key-not-real"}
+        record.unlink()
+        served = tmp_path / "api" / "artifacts" / "v9.9.9" / "corpus.py"
+        served.write_text(served.read_text() + "# changed\n")
+        with pytest.raises(RecipeError, match="not the one ask.lock.json pins"):
+            site.upload_help(base, lock)
+        assert not record.exists()
     finally:
         server.shutdown()
 

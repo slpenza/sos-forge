@@ -6,7 +6,8 @@
 #
 # Needs: python3 with the dev extras and `build` installed, gh signed in (GH_TOKEN in CI), node 24, AWS access to
 # sosforge-deploy-role, and Ask & Answer's API (site/site.toml's ask_base), from which the build fetches the release
-# ask.lock.json pins, checked file by file (design/v0/v0.4.2.md).
+# ask.lock.json pins, checked file by file (design/v0/v0.4.2.md). $ASK_UPLOAD_KEY is sos's upload key: the help docs
+# reach Ask & Answer only through this release's upload (design/v0/v0.4.10.md).
 # Datasets (MP4/JPG) are not built here: bundle them and attach them to a data-YYYY-MM release before pushing the
 # version tag whose site/site.toml lists them (design/v0/v0.3.0.md).
 set -euo pipefail
@@ -19,6 +20,8 @@ tag=$(git describe --exact-match --tags HEAD 2>/dev/null) || fail "HEAD is not e
 python3 tools/scope.py --release "$tag"
 version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
 [ "$tag" = "v$version" ] || fail "$tag does not match the version in pyproject.toml ($version)"
+# Checked before anything is published, so a release never deploys a site whose Help answers from older docs.
+[ ! -d infra ] || [ -n "${ASK_UPLOAD_KEY:-}" ] || fail "ASK_UPLOAD_KEY is not set: the help docs reach Ask & Answer only through the release's upload"
 
 python3 -m pytest -q
 rm -rf dist-pkg
@@ -39,5 +42,7 @@ if [ -d infra ]; then
   python3 -m sosforge site --out build/site
   [ -n "${CI:-}" ] || export AWS_PROFILE="${AWS_PROFILE:-sosforge-deploy-role}"
   (cd infra && npm ci && SOSFORGE_SITE_DIR="$PWD/../build/site" npx cdk deploy SosForgeSite --require-approval never)
+  # The docs Help answers from, as this tag committed them, with the corpus.py ask.lock.json pins.
+  python3 -m sosforge upload-help
 fi
 echo "released $tag"

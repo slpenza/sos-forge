@@ -144,6 +144,13 @@ def cmd_site(args) -> int:
     return 0
 
 
+def cmd_upload_help(args) -> int:
+    """Upload the help docs to Ask & Answer with the pinned corpus.py and the key in $ASK_UPLOAD_KEY, as a release does. Tested by test_site.py::test_upload_help_uses_the_pinned_corpus through upload_help(); the CLI wrapper runs in tools/release.sh."""
+    from .site import load_config, upload_help
+    upload_help(args.ask_base or os.environ.get("SOSFORGE_ASK_BASE") or load_config(Path(args.config))["ask_base"])
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     """Build the argparse tree for all subcommands. Tested by test_cli.py::test_new_list_check_and_resolve."""
     ap = argparse.ArgumentParser(prog="sos", description="Build NOAA Science On a Sphere datasets from recipes.")
@@ -199,6 +206,11 @@ def parser() -> argparse.ArgumentParser:
                    help="skip checking that every download (and length) in site.toml is on its release")
     p.add_argument("--serve", type=int, nargs="?", const=8040, help="serve the result locally on this port")
     p.set_defaults(fn=cmd_site)
+    p = sub.add_parser("upload-help", help="upload the help docs to Ask & Answer with the key in $ASK_UPLOAD_KEY "
+                                           "(a release does this)")
+    p.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "site" / "site.toml"))
+    p.add_argument("--ask-base", help="Ask & Answer API base (default $SOSFORGE_ASK_BASE, then site.toml's ask_base)")
+    p.set_defaults(fn=cmd_upload_help)
     return ap
 
 

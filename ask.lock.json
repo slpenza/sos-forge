@@ -1,11 +1,11 @@
 {
-  "release": "v0.19.14",
+  "release": "v0.19.15",
   "files": {
     "ask-client.js": "sha384-sGwHhl/A7Smg8S4Vfmi8uZZUo9+s5pn3LwbxN2Z+ML6nApWo+CuEGR3lyfl/qNyK",
     "ask-panel.css": "sha384-2xrhK4/220LyQrTc9jd8wqrVZALC9XPKF4Gu2yd90FR8JQvuV8S4ORXULaJ/21YM",
     "ask-panel.js": "sha384-mKnthRhep2esumSoQkBAPwGhPIwrA6HTRnRllCPMYP8qajOAu8HLpcPZi+M4aqYp",
     "corpus.py": "sha384-LZEF8k38wLK1HpTGjrKNQIFWjpGWtRG4l1pNC1lWLZByEmIY1NQrApa3R42J8hBP",
-    "docsite/index.html": "sha384-VWLVrya5OLWGuvkqngNUvgiziSXkwNs0ncnODdeedQN0BJG95v2QZ7YktI4quuDd",
+    "docsite/index.html": "sha384-Br/yAIOptu76Wz8Fe5t1wjpRgL8sxrvMa+ltyIgL3xsPyd5QN1YksYgJNQvI8wXr",
     "docsite/markdown-it.min.js": "sha384-evuM6sXRJAvv4T8qCMd9A/cG4NCYnYoVsP0lsgZLmXq6C7rrsy4z4l6W+dWBaiAM",
     "docsite/viewer.js": "sha384-A1ufVpykVd4a0Q67aEQFLJdTFPE/tX3L5dmagU4pt2ePKDMeOarGNL/odYrzon2W"
   }

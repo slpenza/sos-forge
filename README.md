@@ -148,6 +148,9 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
   `sos bundle` also writes `<version>_web.zip`: a 2048-wide H.264 preview with its `labels.txt`, which the cards and
   the simulator play. Upload those too. `sos site` refuses to deploy a download, length or preview that its release
   doesn't hold.
+- **Help's docs reach Ask & Answer only through a release.** After the site deploys, `release.sh` runs
+  `sos upload-help`, which uploads the committed docs with the pinned `corpus.py` and the `ASK_UPLOAD_KEY` secret. A
+  docs change is live on Help once its version is released.
 - **Moving to another Ask & Answer release** is deliberate, never part of a build: take `corpus.py` from the API's
   `artifacts.base`, check it against the integrity `GET /ask` lists, run
   `python3 corpus.py --project . --lock <ask_base>`, and commit the new `ask.lock.json` with the version that moves.

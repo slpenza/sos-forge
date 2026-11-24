@@ -440,6 +440,25 @@ def fetch_ask(ask_base: str, into: Path, lock_path: Path | None = None) -> Path:
     return into
 
 
+UPLOAD_KEY_ENV = "ASK_UPLOAD_KEY"   # the upload key Ask & Answer issued for sos; a release secret, never in the repo
+
+
+def upload_help(ask_base: str, lock_path: Path | None = None, key_env: str = UPLOAD_KEY_ENV) -> None:
+    """Upload this project's help docs to Ask & Answer with the pinned release's own corpus.py (checked against ask.lock.json), reading the upload key from the environment variable key_env, so Help answers from what this release committed. Tested by test_site.py::test_upload_help_uses_the_pinned_corpus against a stand-in API; the real upload runs in tools/release.sh."""
+    if not os.environ.get(key_env):
+        raise RecipeError(f"${key_env} is not set: Help's docs reach Ask & Answer only through this upload "
+                          "(design/v0/v0.4.10.md)")
+    lock_path = lock_path or ASK_LOCK
+    base = ask_base.rstrip("/")
+    with tempfile.TemporaryDirectory() as tmp:
+        corpus = fetch_ask(base, Path(tmp) / "ask", lock_path) / "corpus.py"
+        res = subprocess.run([sys.executable, "-I", str(corpus), "--project", str(lock_path.parent), "--upload", base,
+                              "--key-env", key_env], capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RecipeError(f"corpus.py could not upload the help docs:\n{res.stderr.strip() or res.stdout.strip()}")
+    LOG.info("help docs uploaded to %s: %s", base, (res.stdout.strip().splitlines() or [""])[-1])
+
+
 def build_help(corpus: Path, out: Path, frame: dict, ask_base: str, key: str = "sos") -> None:
     """Write the help pages, with Ask & Answer's panel on their landing, from a temporary copy of the project whose askAnswer block gains the [help] frame (bar, title, groups, layout, ask), so package.json keeps only what the corpus needs. Tested by test_site.py::test_build_site_end_to_end with a stand-in corpus.py that records what it was given; the real tool is exercised by sos site."""
     pkg = json.loads((REPO_ROOT / "package.json").read_text())
