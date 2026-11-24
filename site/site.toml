@@ -12,7 +12,7 @@
 [site]
 domain = "sos.stevenpenza.com"
 repo = "slpenza/sos-forge"
-ask_release = "v0.19.1"          # ask-answer tag whose client/ and tools/ the build copies; keep equal to ask-answer-deploy's "release"
+ask_release = "v0.19.3"          # ask-answer tag whose client/ and tools/ the build copies; keep equal to ask-answer-deploy's "release"
 ask_projects = ["sos"]
 preview_width = 2048             # browser previews are H.264 at this width (or smaller sources as they are)
 
@@ -43,6 +43,8 @@ topics = ["docs/troubleshooting.md"]
 
 [[datasets]]
 slug = "where_the_world_plays"
+lengths = [18, 72, 135]
+label_style = true
 sources = [{ label = "OpenStreetMap contributors", url = "https://www.openstreetmap.org/copyright" }]
 per = { unit = "sport", count = 9 }   # its pace: 8 sports and the all-sports map; dated movies take years from the recipe
 dates = "Mapped as of 22 Nov 2026"     # when its OpenStreetMap data was fetched; every pace was rendered from that copy
@@ -52,6 +54,8 @@ downloads = ["where_the_world_plays_4k.zip", "where_the_world_plays_4k_h264.zip"
 
 [[datasets]]
 slug = "getting_richer"
+lengths = [20, 101, 202]
+label_style = true
 sources = [{ label = "Maddison Project Database 2023", url = "https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023" }, { label = "Our World in Data", url = "https://ourworldindata.org/grapher/gdp-per-capita-maddison-project-database" }]
 release = "data-2026-11"
 preview = "getting_richer_4k_h264.zip"
@@ -59,6 +63,8 @@ downloads = ["getting_richer_4k.zip", "getting_richer_4k_h264.zip"]
 
 [[datasets]]
 slug = "cities_growing"
+lengths = [11, 55, 110]
+label_style = true
 sources = [{ label = "GHSL Urban Centre Database R2024A, European Commission JRC", url = "https://doi.org/10.2905/1a338be6-7eaf-480c-9664-3a8ade88cbcd" }]
 release = "data-2026-11"
 preview = "cities_growing_4k_h264.zip"
