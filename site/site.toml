@@ -15,6 +15,7 @@ repo = "slpenza/sos-forge"
 ask_base = "https://ask.stevenpenza.com"   # Ask & Answer's API: the help, the ask box and the CSP use it
 ask_projects = ["sos"]
 preview_width = 2048             # browser previews are H.264 at this width (or smaller sources as they are)
+count = true                     # pages send anonymous view and download counts to /api/hit (design/v0/v0.7.0.md)
 
 
 # The help pages' frame. package.json's askAnswer block carries only what the corpus needs; the title, bar, groups,

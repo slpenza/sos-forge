@@ -124,7 +124,7 @@ body.sim { display: flex; flex-direction: column; min-height: 100dvh; }
 }
 
 /* What's new (design/v0/v0.5.1.md): the home page's latest lines, and the page listing every version. */
-.whats-new { margin: 0 0 var(--gap); padding: 14px 16px; background: var(--panel); border: 1px solid var(--rule);
+.whats-new { margin: var(--gap) 0 0; padding: 14px 16px; background: var(--panel); border: 1px solid var(--rule);
   border-radius: var(--radius); max-width: 860px; }
 .whats-new[hidden] { display: none; }
 .whats-new h2 { font-size: 1rem; margin: 0 0 8px; }

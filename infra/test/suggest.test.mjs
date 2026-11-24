@@ -125,6 +125,17 @@ test('limits count per visitor and per day', async () => {
   assert.equal(f.sent.length, 4);
 });
 
+test('a sent suggestion is counted once, and a count that fails doesn\'t fail it', async () => {
+  const f = fakes();
+  const counted = [];
+  f.ports.count = async (now) => { counted.push(now); };
+  assert.equal((await makeHandler(f.ports, CFG)(event(GOOD))).statusCode, 200);
+  assert.equal((await makeHandler(f.ports, CFG)(event({ ...GOOD, url: 'nope' }))).statusCode, 400);
+  assert.deepEqual(counted, [T0]);
+  f.ports.count = async () => { throw new Error('table down'); };
+  assert.equal((await makeHandler(f.ports, CFG)(event(GOOD, { ip: '203.0.113.30' }))).statusCode, 200);
+});
+
 test('a send that fails says so and is not retried', async () => {
   const f = fakes();
   f.failSend = true;

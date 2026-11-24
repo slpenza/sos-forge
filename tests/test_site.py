@@ -368,7 +368,7 @@ def test_build_site_end_to_end(tmp_path):
     assert d["slug"] == "tiny" and d["downloads"][0]["url"] == "https://github.com/slpenza/sos-forge/releases/download/v0.1.0/tiny.zip"
     assert json.loads((out / "datasets.json").read_text()) == manifest
     assert isinstance(json.loads((out / "changes.json").read_text())["versions"], list)
-    assert json.loads((out / "config.json").read_text()) == {"askProjects": ["sos"], "askBase": base}
+    assert json.loads((out / "config.json").read_text()) == {"askProjects": ["sos"], "count": False, "askBase": base}
     seen = json.loads((out / "help" / "index.html").read_text())
     assert seen["key"] == "sos" and seen["ask_base"] == base and seen["block"]["layout"] == "desk"
     assert seen["block"]["ask"] == {"heading": "Ask us", "suggestions": 3} and seen["block"]["bar"] == "./site/help-bar.html"
@@ -381,7 +381,7 @@ def test_build_site_end_to_end(tmp_path):
     assert not list(out.rglob("*.test.mjs")) and not (out / "help-head.html").exists() and not (out / "site.toml").exists()
     assert not (out / "ask.html").exists() and not any('ask.html' in f.read_text() for f in out.glob("*.html"))
     bare = site.build_site(cfg, tmp_path / "bare", dist=dist, ask_base="")
-    assert bare["datasets"] and json.loads((tmp_path / "bare" / "config.json").read_text()) == {"askProjects": ["sos"]}
+    assert bare["datasets"] and json.loads((tmp_path / "bare" / "config.json").read_text()) == {"askProjects": ["sos"], "count": False}
     assert not (tmp_path / "bare" / "help").exists() and not (tmp_path / "bare" / "ask").exists()
     docs = 'href="https://github.com/slpenza/sos-forge/blob/main/docs/getting-started.md"'
     for page, links in (("index.html", 2), ("simulator.html", 1), ("404.html", 1)):

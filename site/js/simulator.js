@@ -5,7 +5,7 @@
 import { Globe, attachControls } from './globe.js';
 import { parsePlaylist, parseLabels, playbackSettings, findDataFile } from './playlist.js';
 import { visitorView } from './sphere-math.js';
-import { pickVersion, simulatorHref, versionPicker } from './versions.js';
+import { pickVersion, simulatorHref, versionKind, versionPicker } from './versions.js';
 
 const $ = (id) => document.getElementById(id);
 const ORBIT = { pitch: 12, distance: 3.2, fovDeg: 45 };
@@ -61,7 +61,9 @@ function describe(s, extra = {}) {
   list($('ds-licences'), extra.licences || []);
   const dl = $('ds-downloads');
   dl.replaceChildren(...(extra.downloads || []).map((d) => { const a = document.createElement('a'); a.href = d.url;
-    a.textContent = d.label; a.className = 'btn'; return a; }));
+    a.textContent = d.label; a.className = 'btn';
+    if (extra.count) { a.dataset.countDataset = extra.count.dataset; a.dataset.countVersion = extra.count.version; }
+    return a; }));
   dl.hidden = !(extra.downloads || []).length;
 }
 
@@ -223,7 +225,8 @@ async function playVersion(d, v, keepPlace) {
   if (v.labels) { try { labels = parseLabels(await (await fetch(v.labels)).text()); } catch { labels = []; } }
   // The SOS-labels version's playlist shows its labels; the painted one ships them hidden, as on a sphere.
   start(playbackSettings(d.playlist), v.video, d.kind === 'movie', d.source_fps || 30,
-    { credits: d.credits, licences: d.licences, downloads: v.downloads, labels, labelsOn: v.style === 'labels', ...place });
+    { credits: d.credits, licences: d.licences, downloads: v.downloads, labels, labelsOn: v.style === 'labels',
+      count: { dataset: d.slug, version: versionKind(v) }, ...place });
 }
 
 /**

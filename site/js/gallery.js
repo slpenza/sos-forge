@@ -3,7 +3,7 @@
 // text styles get Length and Text selects that set what plays, what the simulator opens and what Download fetches.
 import { labelCues } from './captions.js';
 import { lengthLabel } from './lengths.js';
-import { pickVersion, simulatorHref, versionPicker } from './versions.js';
+import { pickVersion, simulatorHref, versionKind, versionPicker } from './versions.js';
 
 /**
  * Add a version's labels to a preview as a native caption track pinned to the top, so the text drawn for a sphere stays readable flat and in full screen. Tested in the browser against the built site; the cue timing is tested by captions.test.mjs.
@@ -82,7 +82,10 @@ function card(d) {
   const apply = () => {
     const href = simulatorHref(d.slug, v);
     sim.href = href; pic.link.href = href;
-    if (dl) { dl.href = v.downloads[0].url; dl.title = v.downloads[0].label; }
+    if (dl) {
+      dl.href = v.downloads[0].url; dl.title = v.downloads[0].label;
+      dl.dataset.countDataset = d.slug; dl.dataset.countVersion = versionKind(v);   // for the site's counts (count.js)
+    }
     const playing = pic.frame.querySelector('video');
     if (playing) playFlat(pic.frame, d, v, playing.duration ? playing.currentTime / playing.duration : 0, !playing.paused);
   };

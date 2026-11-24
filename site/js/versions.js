@@ -22,6 +22,14 @@ export function pickVersion(d, seconds, style) {
 }
 
 /**
+ * Return a version's kind as the site's counts name it: an SOS-labels version, another length, or the standard one. Tested by count.test.mjs.
+ */
+export function versionKind(v) {
+  if (v.style === 'labels') return 'labels';
+  return v.length && !v.length.default ? 'length' : 'standard';
+}
+
+/**
  * Return the simulator link for a version, naming the length and text style only when they differ from the default. Tested by versions.test.mjs.
  */
 export function simulatorHref(slug, v) {

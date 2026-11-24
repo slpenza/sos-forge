@@ -142,12 +142,18 @@ export function makeHandler(ports, cfg) {
       return reply(502, { error: 'Your suggestion couldn’t be sent. Please try again later.' });
     }
     console.log('suggest: sent');
+    // Counted for the dashboard (design/v0/v0.7.0.md); a count that fails doesn't fail the suggestion.
+    if (ports.count) await ports.count(now).catch((err) => console.error('suggest: count failed', err?.name || err));
     return reply(200, { ok: true });
   };
 }
 
+// The New York day of a time, as the site's counts are kept (infra/lambda/metrics/counts.mjs, which this asset can't
+// import): the dashboard's days are New York days.
+const NY_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+
 /**
- * Return the AWS ports: the salt from Secrets Manager (read once per container), a conditional DynamoDB counter with a TTL, and SES v2's raw send. Exercised after a deploy; not unit tested.
+ * Return the AWS ports: the salt from Secrets Manager (read once per container), a conditional DynamoDB counter with a TTL, SES v2's raw send, and, when the stack gives a counts table, the day's suggestion count. Exercised after a deploy; not unit tested.
  */
 async function awsPorts(env) {
   const [{ DynamoDBClient, UpdateItemCommand }, { SESv2Client, SendEmailCommand }, { SecretsManagerClient, GetSecretValueCommand }] =
@@ -174,6 +180,13 @@ async function awsPorts(env) {
     send: async (raw, from, to) => (await ses.send(new SendEmailCommand({
       FromEmailAddress: from, Destination: { ToAddresses: [to] }, Content: { Raw: { Data: Buffer.from(raw) } },
     }))).MessageId,
+    ...(env.COUNTS_TABLE ? {
+      count: async (now) => db.send(new UpdateItemCommand({
+        TableName: env.COUNTS_TABLE, Key: { k: { S: `day#${NY_DAY.format(new Date(now))}#suggestions` } },
+        UpdateExpression: 'ADD n :one SET expires = if_not_exists(expires, :exp)',
+        ExpressionAttributeValues: { ':one': { N: '1' }, ':exp': { N: String(Math.floor(now / 1000) + 400 * 86400) } },
+      })),
+    } : {}),
   };
 }
 

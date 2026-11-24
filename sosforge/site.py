@@ -28,7 +28,7 @@ from .timeline import parse_date
 
 LOG = logging.getLogger("sosforge.site")
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SITE_KEYS = {"domain", "repo", "ask_base", "ask_projects", "preview_width"}
+SITE_KEYS = {"domain", "repo", "ask_base", "ask_projects", "preview_width", "count"}
 DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist", "dates", "lengths", "per", "label_style", "sources",
                 "noaa_catalog"}
 STATIC_SKIP = (".test.mjs", "help-head.html", "help-bar.html", "site.toml")
@@ -83,7 +83,11 @@ def load_config(path: Path) -> dict:
     check_keys("site", site, SITE_KEYS)
     cfg = {"domain": site.get("domain", ""), "repo": site.get("repo", "slpenza/sos-forge"),
            "ask_base": site.get("ask_base"), "ask_projects": site.get("ask_projects", ["sos"]),
-           "preview_width": int(site.get("preview_width", 2048)), "datasets": []}
+           "preview_width": int(site.get("preview_width", 2048)), "datasets": [],
+           # The site's anonymous counts (design/v0/v0.7.0.md): pages send them only when the deployed site has the API.
+           "count": site.get("count", False)}
+    if not isinstance(cfg["count"], bool):
+        raise RecipeError("[site] count is true or false: whether the pages send the site's anonymous counts")
     help_cfg = raw.get("help", {})
     check_keys("help", help_cfg, HELP_KEYS)
     cfg["help_frame"] = {k: help_cfg[k] for k in HELP_KEYS if k in help_cfg}
@@ -550,7 +554,7 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ba
     if not changes:
         LOG.warning("no released version has a For visitors section (are the v* tags fetched?): What's new is empty")
     (out / "changes.json").write_text(json.dumps({"versions": changes}, indent=1))
-    ask_cfg: dict = {"askProjects": cfg["ask_projects"]}
+    ask_cfg: dict = {"askProjects": cfg["ask_projects"], "count": cfg["count"]}
     if ask_base:
         files = fetch_ask(ask_base, work / "ask", ask_lock_path)
         build_help(files / "corpus.py", out, cfg["help_frame"], ask_base)

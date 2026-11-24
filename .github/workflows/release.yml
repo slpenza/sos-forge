@@ -9,6 +9,8 @@
 # The production environment holds:
 #   vars.AWS_DEPLOY_ROLE_ARN  sosforge-deploy-role's ARN (the account stack's sosforgeDeployRoleArn output)
 #   vars.SOS_ZONE_ID          optional: the stevenpenza.com zone ID, which skips a lookup
+#   vars.SOS_STATUS_BUCKET    stevenpenza.com's private dashboard bucket, where the stack publishes status/sos.json
+#                             (design/v0/v0.7.0.md); its name stays out of the public repo
 #   vars.SOS_SUGGEST_TO       optional: where Suggest a dataset sends instead of sos@stevenpenza.com, such as a test
 #                             address; it stays out of the public repo (design/v0/v0.6.1.md)
 #   secrets.ASK_UPLOAD_KEY    sos's Ask & Answer upload key: each release uploads the help docs it committed
@@ -73,6 +75,7 @@ jobs:
           SOS_ZONE_ID: ${{ vars.SOS_ZONE_ID }}
           ASK_UPLOAD_KEY: ${{ secrets.ASK_UPLOAD_KEY }}
           SOSFORGE_SUGGEST_TO: ${{ vars.SOS_SUGGEST_TO }}
+          SOSFORGE_STATUS_BUCKET: ${{ vars.SOS_STATUS_BUCKET }}
         run: ./tools/release.sh
 
       # The deployed site in headless Google Chrome: every page loads clean under its real CSP, and every download on

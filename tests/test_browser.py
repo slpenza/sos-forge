@@ -473,6 +473,44 @@ def test_suggest_form(browser, origin):
     assert [p for p in problems if "429" not in p] == []   # the 429 was asked for
 
 
+def test_counts_views_and_downloads(browser, origin):
+    """Checks counting is off unless config.json turns it on; when on, a page view sends its page and whether the visit began there, a view reached from another page of the site isn't a new visit, and a Download click sends its dataset and version (here SOS labels), with no cookie set; nothing about the visitor is sent. Covers count.js with gallery.js's and versions.js's marks on the Download link, against a stand-in /api/hit; the counter itself is tested by infra/test/metrics.test.mjs."""
+    hits = []
+
+    def track(page):
+        """Record every hit a page sends, answering 204 as the counter does. Helper; not itself tested."""
+        page.route("**/api/hit", lambda r: (hits.append(json.loads(r.request.post_data)), r.fulfill(status=204)))
+
+    off = browser.new_page()
+    track(off)
+    off.goto(origin + "/", wait_until="networkidle")
+    off.wait_for_timeout(500)
+    assert hits == [], "the fixture's config.json leaves counting off"
+    off.close()
+
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    problems = watch(page, origin)
+    track(page)
+    page.route("**/config.json", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                     body=json.dumps({"askProjects": ["sos"], "count": True})))
+    page.route("https://github.com/**", lambda r: r.fulfill(status=204))   # the zip itself isn't fetched
+    page.goto(origin + "/", wait_until="networkidle")
+    page.wait_for_timeout(500)
+    assert hits == [{"kind": "view", "page": "home", "entry": True}]
+    tiny = page.locator(".card").nth(0)
+    tiny.get_by_label("Text").select_option("labels")
+    tiny.locator(".actions a.btn:not(.primary)").click()
+    page.wait_for_timeout(500)
+    assert hits[-1] == {"kind": "download", "dataset": "tiny", "version": "labels"}
+    page.locator('nav a[href="simulator.html"]').click()
+    page.wait_for_url("**/simulator.html")
+    page.wait_for_timeout(800)
+    assert hits[-1] == {"kind": "view", "page": "simulator", "entry": False}
+    assert page.context.cookies() == []
+    assert problems == []
+    page.close()
+
+
 def test_download_urls_cover_every_choice(origin):
     """Checks the smoke check's lists cover each dataset's own downloads, every length in both text styles, and every version's preview and labels, all of which the built site serves. Covers tools/smoke.py download_urls and preview_paths; this test is not itself tested."""
     import urllib.request

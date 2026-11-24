@@ -11,13 +11,14 @@ import { SiteStack, csp, originOf } from '../lib/site-stack.mjs';
 /**
  * Synthesize the stack against a temporary site folder with a fixed zone and account. Test helper; not itself tested.
  */
-function synth(askBase = 'https://ask.example.com/prod') {
+function synth(askBase = 'https://ask.example.com/prod', statusBucket = undefined) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sos-site-'));
   fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>t</title>');
   const app = new cdk.App({ context: { '@aws-cdk/core:bootstrapQualifier': 'sos1' } });
   const stack = new SiteStack(app, 'SosForgeSite', {
     env: { account: '123456789012', region: 'us-east-1' }, domain: 'sos.stevenpenza.com', zoneName: 'stevenpenza.com',
     zoneId: 'Z0000000000000', siteDir: dir, askBase, suggest: { from: 'sos-suggest@stevenpenza.com', to: 'sos@stevenpenza.com' },
+    statusBucket,
   });
   return Template.fromStack(stack);
 }
@@ -71,9 +72,8 @@ test('suggestions reach a throttled API through the site, and the Lambda may onl
     HeadersConfig: { HeaderBehavior: 'whitelist', Headers: ['Content-Type', 'CloudFront-Viewer-Address'] },
     CookiesConfig: { CookieBehavior: 'none' }, QueryStringsConfig: { QueryStringBehavior: 'none' } }) });
   t.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: 'POST /api/suggest' });
-  t.resourceCountIs('AWS::ApiGatewayV2::Route', 1);
   t.hasResourceProperties('AWS::ApiGatewayV2::Stage', { StageName: '$default', AutoDeploy: true,
-    DefaultRouteSettings: { ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 } });
+    RouteSettings: { 'POST /api/suggest': { ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 } } });
   t.hasResourceProperties('AWS::DynamoDB::Table', { TimeToLiveSpecification: { AttributeName: 'expires', Enabled: true },
     BillingMode: 'PAY_PER_REQUEST' });
   t.hasResourceProperties('AWS::Lambda::Function', { Runtime: 'nodejs24.x', Handler: 'index.handler',
@@ -88,7 +88,7 @@ test('suggestions reach a throttled API through the site, and the Lambda may onl
     'ForAllValues:StringEquals': { 'ses:Recipients': ['sos@stevenpenza.com'] } });
   assert.match(JSON.stringify(ses.Resource), /identity\/stevenpenza\.com/);
   const db = policies.filter((s) => actions(s.Action).some((a) => a.startsWith('dynamodb:')));
-  assert.deepEqual(db.map((s) => actions(s.Action)).flat(), ['dynamodb:UpdateItem']);
+  assert.deepEqual([...new Set(db.map((s) => actions(s.Action)).flat())], ['dynamodb:UpdateItem'], 'without a status bucket, only adds');
   assert.ok(policies.some((s) => actions(s.Action).includes('secretsmanager:GetSecretValue')));
   assert.ok(!policies.some((s) => actions(s.Action).some((a) => a === '*' || a.endsWith(':*'))), 'no wildcard actions');
   // The pages still call only their own origin and Ask & Answer: the API is same-origin.
@@ -110,4 +110,32 @@ test('folder URLs get index.html and /help redirects to /help/', () => {
   assert.equal(handler({ request: { uri: '/' } }).uri, '/index.html');
   assert.equal(handler({ request: { uri: '/js/app.js' } }).uri, '/js/app.js');
   assert.equal(handler({ request: { uri: '/help' } }).headers.location.value, '/help/');
+});
+
+test('counts: an anonymous counter on its own route, and a status publisher only when the dashboard bucket is given', () => {
+  const t = synth();
+  t.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: 'POST /api/hit' });
+  t.resourceCountIs('AWS::ApiGatewayV2::Route', 2);
+  t.hasResourceProperties('AWS::ApiGatewayV2::Stage', { DefaultRouteSettings: { ThrottlingBurstLimit: 50, ThrottlingRateLimit: 20 } });
+  const tables = Object.values(t.findResources('AWS::DynamoDB::Table'));
+  const counts = Object.entries(t.findResources('AWS::DynamoDB::Table')).find(([id]) => id.startsWith('SiteCounts'))[1];
+  assert.equal(tables.length, 2);
+  assert.equal(counts.DeletionPolicy, 'Retain', 'the counts outlive the stack');
+  assert.deepEqual(counts.Properties.TimeToLiveSpecification, { AttributeName: 'expires', Enabled: true });
+  t.hasResourceProperties('AWS::Lambda::Function', { Handler: 'hit.handler', Runtime: 'nodejs24.x',
+    Environment: { Variables: Match.objectLike({ PER_HOUR: '200' }) } });
+  t.resourceCountIs('AWS::Events::Rule', 0);
+  assert.ok(!Object.values(t.findResources('AWS::Lambda::Function')).some((f) => f.Properties.Handler === 'status.handler'));
+
+  const s = synth(undefined, 'dash-bucket-example');
+  s.hasResourceProperties('AWS::Events::Rule', { ScheduleExpression: 'rate(5 minutes)', State: 'ENABLED' });
+  s.hasResourceProperties('AWS::Lambda::Function', { Handler: 'status.handler',
+    Environment: { Variables: Match.objectLike({ DOCS_BUCKET: 'dash-bucket-example', STATUS_KEY: 'status/sos.json' }) } });
+  const statements = Object.values(s.findResources('AWS::IAM::Policy')).map((p) => p.Properties.PolicyDocument.Statement).flat();
+  const put = statements.filter((st) => [].concat(st.Action).includes('s3:PutObject') && JSON.stringify(st.Resource).includes('dash-bucket-example'));
+  assert.equal(put.length, 1);
+  assert.equal(put[0].Resource, 'arn:aws:s3:::dash-bucket-example/status/sos.json', 'it may write only its own status file');
+  const get = statements.filter((st) => [].concat(st.Action).includes('s3:GetObject') && JSON.stringify(st.Resource).includes('datasets.json'));
+  assert.equal(get.length, 1, 'it reads only the gallery manifest from the site bucket');
+  assert.ok(statements.some((st) => [].concat(st.Action).includes('dynamodb:BatchGetItem')));
 });
