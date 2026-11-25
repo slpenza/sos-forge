@@ -77,6 +77,41 @@ def test_grid_layer_glows_and_reports_times(tmp_path):
         make_layers(make_context(r, BuildOptions(width=64, build_dir=tmp_path / "b2")))
 
 
+@register_source("test_people")
+def _test_people(opts, ctx):
+    """Serve a 1-degree grid of people per km2 rising tenfold from west to east, 1 to 10,000, with a total. Test source; not itself tested."""
+    v = np.zeros((180, 360), np.float32)
+    for i, value in enumerate((1.0, 10.0, 100.0, 1000.0, 10000.0)):
+        v[80:100, 100 + 30 * i:110 + 30 * i] = value
+    return GridField(v, -179.5, 1.0, 89.5, -1.0, attribution="Test people", license="PD", fingerprint="p",
+                     stats={"people": 8.2e9, "people_billions": 8.2})
+
+
+def test_grid_log_scale_and_legend(tmp_path):
+    """Checks a log-scale grid brightens by equal steps for each tenfold rise and leaves cells under its minimum dark, reports the source's numbers for HUD templates, draws its legend onto the frame at the HUD's anchors, and refuses an unknown scale and a minimum of 0 on a log scale. Covers GridLayer's scale, overlay and values with stats, and legend.Legend; the legend's look is checked by eye on where_people_live."""
+    toml = ('[dataset]\nname="g"\n[[layers]]\ntype="basemap"\ncolor="#000000"\n[[layers]]\ntype="grid"\n'
+            'source={type="test_people"}\ncolormap="#ffffff"\nscale="log"\nmin=1\nmax=10000\nlegend=true\n'
+            'legend_title="People per km2"\n[hud]\nenabled=false\nanchors=[0]\n')
+    ctx, layers, fr = setup(tmp_path, toml)
+    canvas = np.zeros((180, 360, 3), np.float32)
+    layers[1].render(canvas, ctx.timeline.at(0))
+    lum = [float(canvas[90, 105 + 30 * i, 0]) for i in range(5)]
+    assert lum[0] == pytest.approx(0, abs=1e-3) and lum[4] == pytest.approx(1, abs=1e-2)
+    assert all(abs((lum[i + 1] - lum[i]) - 0.25) < 0.02 for i in range(4)), lum
+    assert canvas[20, 20].sum() == 0
+    v = layers[1].values(ctx.timeline.at(0))
+    assert v["people_billions"] == 8.2 and v["grid_peak"] == 10000
+    plain = np.zeros((180, 360, 3), np.uint8)
+    framed = plain.copy()
+    layers[1].overlay(framed, ctx.timeline.at(0))
+    ys, xs = np.nonzero(framed.sum(-1))
+    assert len(xs) and abs(xs.mean() - 180) < 20 and ys.mean() > 90 + 30, (xs.mean(), ys.mean())
+    for bad, match in (('scale="log"', 'scale="ln"'), ("min=1", "min=0")):
+        r = load_recipe(write_recipe(tmp_path / f"bad{len(match)}", toml.replace(bad, match)))
+        with pytest.raises(RecipeError, match="scale must be|above 0"):
+            make_layers(make_context(r, BuildOptions(width=64, build_dir=tmp_path / "b3")))
+
+
 def test_daylight_follows_the_sun(tmp_path):
     """Checks the subsolar point is day and its antipode night at a fixed moment, values report the Sun, and bad times are refused. Covers DaylightLayer prepare, render, values and when; this test is not itself tested."""
     for d in (tmp_path / "r", tmp_path / "t" / "r"):

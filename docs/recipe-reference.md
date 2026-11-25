@@ -146,15 +146,20 @@ position:
 
 ### `grid`
 
-A gridded field, such as the aurora forecast, drawn as light or paint.
+A gridded field, such as the aurora forecast or where people live, drawn as light or paint.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `source` | required | A gridded source (`swpc_aurora`) |
+| `source` | required | A gridded source (`swpc_aurora`, `ghsl_pop`) |
 | `colormap` | `aurora` | `fire`, `ice`, `aurora`, `wealth`, `sea` or `"#rrggbb"` |
 | `min`, `max`, `gamma` | data range, 1 | The values mapped onto the colour ramp |
+| `scale` | `linear` | `log` gives each tenfold rise the same step up the ramp; `min` and `max` must then be above 0, and values under `min` stay dark |
 | `blend`, `opacity` | `add`, 1 | `add` glows as light; `over` paints over the layers below, covering more where values are higher |
 | `smooth_km` | 0 | Softens a coarse grid |
+| `legend`, `legend_title`, `legend_format` | `false`, none, `"{:,.0f}"` | A colour bar with round ticks, drawn at the HUD's anchors |
+| `legend_lat`, `legend_anchors` | -46, the HUD's | Where the legend sits |
+
+The source's own numbers, such as `ghsl_pop`'s `people` and `people_billions`, are HUD values.
 
 ### `regions`
 
@@ -183,6 +188,7 @@ that share a code, such as a country and its territories, share its value.
 | `tracks` | `path` (glob), `attribution` | GPX, TCX, FIT (needs `pip install 'sos-forge[fit]'`) and `.gz` versions; GeoJSON lines |
 | `overpass` | `queries = [{ category, query }]`, `endpoint`, `max_age_days`, `timeout_s`, `pause_s` | Overpass QL statements; output is cached and paced |
 | `ghsl_ucdb` | none | About 11,700 urban centres with population every five years from 1975 to 2030 (GHSL R2024A; 2030 is projected). Columns `name`, `country` and `MT_POP_TOT_<year>`. Downloads 37 MB once |
+| `ghsl_pop` | `cells_per_degree` (12) | People per km² in 2025 from GHSL's population grid (GHS-POP R2023A), summed from 30 arcseconds into cells of 1/12° (about 9 km), with the total as `people` and `people_billions`. Downloads 484 MB once. For `grid` layers |
 | `swpc_aurora` | `max_age_minutes` | NOAA's OVATION aurora forecast: a 1° grid of the 0–100 % chance of aurora overhead. Cached 30 minutes. For `grid` layers |
 | `natural_earth` | `scale` (`50m` or `110m`) | Country shapes keyed by ISO 3166 alpha-3 code. For `regions` layers |
 | `geojson_regions` | `path`, `code`, `name`, `attribution`, `license` | Your own polygons. For `regions` layers |

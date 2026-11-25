@@ -125,3 +125,32 @@ def test_mollweide_and_gpkg_points(tmp_path):
     cols = ghsl.read_points(db)
     assert cols["name"].tolist() == ["Tokyo", "Lagos"] and np.allclose(cols["lat"], [35.7, 6.5], atol=1e-6)
     assert cols["MT_POP_TOT_2030"].tolist() == [3.7e7, 2.1e7]
+
+
+def test_ghsl_pop_sums_people(tmp_path):
+    """Checks GHS-POP's grid is summed into coarse cells by each source cell's centre, read tile by tile from a GeoTIFF with GHSL's georeferencing: people land in the right cell, the source's extra columns beyond +/-180 and its no-data, negative and NaN cells count as nobody, the cell areas add up to the sphere, density is people per square kilometre at cell centres, and the total is reported; and a bad cells_per_degree is refused before any download. Covers population_counts, runs, cell_areas_km2, population_field and ghsl_pop's option check against a synthetic GeoTIFF; the real download and grid are checked by building where_people_live."""
+    import tifffile
+    # Half-degree cells, one extra column each side of +/-180 as the real grid has, in 16-pixel tiles.
+    grid = np.zeros((360, 722), np.float64)
+    grid[89, 381] = 1000.0        # centre 45.25N, 10.25E: cell (44, 190) at 1 cell per degree
+    grid[88, 381] = 500.0         # centre 45.75N, 10.25E: the same 1-degree cell
+    grid[90, 381] = 50.0          # centre 44.75N, 10.25E: the cell south of it, (45, 190)
+    grid[0, 0] = 999.0            # centred at 180.25W: beyond +/-180, dropped
+    grid[10, 721] = 777.0         # centred at 180.25E: dropped
+    grid[200, 100] = -200.0       # no data
+    grid[201, 100] = np.nan
+    grid[300, 1] = 7.0            # centre 179.75W, 60.25S: the first kept column
+    tif = tmp_path / "pop.tif"
+    tifffile.imwrite(tif, grid, tile=(16, 16), compression="zlib",
+                     extratags=[(33550, "d", 3, (0.5, 0.5, 0.0), False), (33922, "d", 6, (0, 0, 0, -180.5, 90.0, 0), False)])
+    counts = ghsl.population_counts(tif, 1)
+    assert counts.shape == (180, 360) and counts.sum() == pytest.approx(1557.0)
+    assert (counts[44, 190], counts[45, 190], counts[150, 0]) == (1500.0, 50.0, 7.0)
+    areas = ghsl.cell_areas_km2(1)
+    assert areas.sum() * 360 == pytest.approx(4 * math.pi * ghsl.EARTH_RADIUS_KM ** 2, rel=1e-9)
+    f = ghsl.population_field(counts, 1, "abc")
+    assert (f.lon0, f.dlon, f.lat0, f.dlat) == (-179.5, 1.0, 89.5, -1.0)
+    assert f.values[44, 190] == pytest.approx(1500.0 / areas[44], rel=1e-6)
+    assert f.stats["people"] == pytest.approx(1557.0) and f.license == "CC-BY-4.0" and f.fingerprint == "abc:1"
+    with pytest.raises(RecipeError, match="cells_per_degree must be 1 to 120"):
+        ghsl.ghsl_pop({"cells_per_degree": 0}, None)

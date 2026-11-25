@@ -1,0 +1,36 @@
+# Where 8 Billion People Live: how many people live in each part of the world, from the European Commission's GHSL
+# population grid for 2025 (GHS-POP R2023A, CC BY 4.0), as people per square kilometre on a log scale.
+# The first build downloads a 484 MB archive once (size- and hash-checked) and sums its 30-arcsecond grid into
+# 5-arcminute cells, about 9 km across at the equator; both are cached.
+
+[dataset]
+name = "Where 8 Billion People Live"
+slug = "where_people_live"
+description = "How many people live in each part of the world in 2025, from the European Commission's GHSL population grid: brighter means more people per square kilometre, on a log scale, so each step up the legend is ten times as many. It isn't night lights: places without electric light glow just as brightly."
+output = "texture"
+width = 4096
+
+[playlist]
+subcategory = "People"
+
+[[layers]]
+type = "basemap"
+name = "blue_marble"
+brightness = 0.08
+saturation = 0.35
+
+[[layers]]
+type = "grid"
+source = { type = "ghsl_pop" }
+scale = "log"
+min = 1
+max = 10000
+colormap = "fire"
+legend = true
+legend_title = "People per km²"
+legend_format = "{:,.0f}"
+
+[hud]
+anchors = [-20, 90, -140]   # open ocean at 30S: South Atlantic, Indian, South Pacific
+title = "Where 8 billion people live"
+subtitle = "{people_billions:.1f} billion people, 2025"

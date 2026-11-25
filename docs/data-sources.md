@@ -15,6 +15,7 @@ It was last checked on 22 November 2026.
 | Maddison Project Database 2023, through Our World in Data | Getting Richer | CC BY 4.0. Cite the Maddison Project and Our World in Data | Free to use. Cached for 30 days | Bolt and van Zanden – Maddison Project Database 2023; Our World in Data (CC BY 4.0) |
 | Natural Earth | Country shapes in Getting Richer | Public domain | Free to use | Natural Earth (public domain) |
 | GHSL Urban Centre Database R2024A, European Commission Joint Research Centre | Cities Growing | CC BY 4.0, © European Union | Free to use. Downloaded once and checked against a fixed size and hash | GHSL Urban Centre Database R2024A, European Commission JRC, doi:10.2905/1a338be6-7eaf-480c-9664-3a8ade88cbcd (CC BY 4.0) |
+| GHS-POP R2023A population grid, European Commission Joint Research Centre | Where 8 Billion People Live | CC BY 4.0, © European Union. Cite the dataset and its DOI | Free to use. Downloaded once and checked against a fixed size and hash | GHS-POP R2023A, 2025 estimate, European Commission Joint Research Centre, doi:10.2905/2FF68A52-5B5B-4A22-8F40-C41DA8332CFE (CC BY 4.0) |
 | Your own GPS files | My Activities | Yours | Free to use. The first and last 400 m of each track are trimmed so your home doesn't show | Whatever you choose |
 
 ## What a dataset needs to carry

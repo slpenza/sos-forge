@@ -128,6 +128,7 @@ class GridField:
     attribution: str = ""
     license: str = ""
     fingerprint: str = ""
+    stats: dict = field(default_factory=dict)   # named numbers for HUD templates, such as a population total
 
 
 @dataclass

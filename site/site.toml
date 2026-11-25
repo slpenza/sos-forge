@@ -90,3 +90,11 @@ release = "data-2026-11"
 preview = "aurora_forecast_4k.zip"               # a still image, so one zip serves both
 downloads = ["aurora_forecast_4k.zip"]
 dates = "Forecast for 18:52 UTC"               # this build's forecast time; its date is in the name, so isn't repeated
+
+[[datasets]]
+slug = "where_people_live"
+sources = [{ label = "GHS-POP R2023A, European Commission JRC", url = "https://doi.org/10.2905/2FF68A52-5B5B-4A22-8F40-C41DA8332CFE" }]
+release = "data-2026-11"
+preview = "where_people_live_4k.zip"             # a still image, so one zip serves both
+downloads = ["where_people_live_4k.zip"]
+dates = "2025 estimate"
