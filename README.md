@@ -37,8 +37,8 @@ README has the exact commands and checksums).
   preview plays, what the simulator opens and what Download fetches
 - a **simulator** that plays a dataset on a virtual 6-foot sphere in the browser, following its `playlist.sos`
   (frame rate, holds, spin, tilt, and SOS labels drawn on the sphere where the sphere draws them). It has Orbit and
-  Visitor views and the same Length and Text selects, and you can drop in a dataset folder of your own; nothing is
-  uploaded.
+  Visitor views and the same Length and Text selects, and you can drop in a dataset folder of your own, or a 360
+  video from your camera, to see it on the sphere (design/v0/v0.8.0.md); nothing is uploaded.
 - the help, built by Ask & Answer, with its question box first, and an ask box on the home page that takes a
   question there. The release is pinned in `ask.lock.json` and fetched from `site/site.toml`'s `ask_base`, each
   file checked against the lock. `sos site --no-ask` builds without it (a fork, say): the gallery and simulator stay,

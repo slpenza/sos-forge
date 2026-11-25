@@ -48,4 +48,5 @@ test('finds the data file in a dropped folder', () => {
   assert.equal(findDataFile(files, 'moon_phases_1k.mp4').name, 'Moon_Phases_1K.mp4');
   assert.equal(findDataFile(files, 'missing.mp4').name, 'Moon_Phases_1K.mp4');
   assert.equal(findDataFile([{ name: 'a.txt' }], 'x'), null);
+  assert.equal(findDataFile([{ name: 'notes.txt' }, { name: 'Trip.MOV' }], '').name, 'Trip.MOV');
 });

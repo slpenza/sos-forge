@@ -28,7 +28,7 @@
     <canvas id="globe" aria-label="The dataset on a virtual sphere. Drag sideways or use the arrow keys to turn it, up or down to look from higher or lower, and scroll or pinch to step closer."></canvas>
     <p id="label-text" class="sr-only" aria-live="off"></p>
     <p id="status" class="status" hidden></p>
-    <div class="drop-hint" aria-hidden="true">Drop a dataset folder</div>
+    <div class="drop-hint" aria-hidden="true">Drop a dataset folder or a 360 video</div>
     <div class="controls">
       <div id="transport" class="transport">
         <button id="play" class="btn" aria-pressed="true">Pause</button>
@@ -53,6 +53,11 @@
     </label>
     <p class="hint">Use the folder <code>sos build</code> made. It stays on your computer. Videos must be H.264,
       from the folder ending in <code>_h264</code>.</p>
+    <label class="btn file">Open a 360 video&hellip;
+      <input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm" hidden>
+    </label>
+    <p class="hint">The stitched 360 video your camera’s app exports, as MP4. It plays as recorded and stays on your
+      computer.</p>
     <h2 id="ds-name">&nbsp;</h2>
     <p id="ds-desc"></p>
     <table id="ds-settings" class="settings"></table>

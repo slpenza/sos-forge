@@ -1,17 +1,21 @@
 // The SOS simulator page: plays a gallery dataset or a dropped dataset folder on a WebGL sphere, following the
 // playlist the way the sphere does (frame rate, first/last holds, auto-play, spin, tilt). A gallery dataset with
 // several versions (lengths, painted text or SOS labels) can switch between them in place. SOS labels are drawn on the
-// sphere, where the sphere draws them, and shown or hidden as the playlist says. Nothing is uploaded.
+// sphere, where the sphere draws them, and shown or hidden as the playlist says. A 360 video from the visitor's device
+// plays on the sphere as it was recorded (design/v0/v0.8.0.md). Nothing is uploaded.
 import { Globe, attachControls } from './globe.js';
 import { parsePlaylist, parseLabels, playbackSettings, findDataFile } from './playlist.js';
 import { visitorView } from './sphere-math.js';
 import { pickVersion, simulatorHref, versionKind, versionPicker } from './versions.js';
+import { cantPlayText, frameProblems, isVideoFile, videoTitle } from './video360.js';
 
 const $ = (id) => document.getElementById(id);
 const ORBIT = { pitch: 12, distance: 3.2, fovDeg: 45 };
 const VISITOR_FOV = 70; // roughly what a person standing at the sphere takes in
 const TEXTURE_SPIN = 6;
 const MPEG4_HINT = 'This video doesn’t play in web browsers. MPEG-4 Part 2, the format NOAA recommends for the sphere, only plays on SOS or in VLC. Open the dataset’s H.264 folder (the one ending in _h264) instead.';
+const VIDEO_NOTE = 'Your 360 video, playing on this device as it was recorded. It isn’t uploaded. A sphere is seen from '
+  + 'outside, so the sky fills the top, the ground the bottom, and the camera’s mount sits at the bottom pole.';
 
 const state = { globe: null, media: null, kind: null, settings: null, phase: 'play', until: 0, paused: false,
   spinOn: false, spinDeg: 0, last: performance.now(), dirty: false, urls: [], labels: [], sourceFps: 30,
@@ -50,7 +54,7 @@ function unload() {
 function describe(s, extra = {}) {
   $('ds-name').textContent = s.name;
   $('ds-desc').textContent = s.description.replace(/\s*Credits:.*$/, '');
-  const rows = [['Frame rate', `${s.fps} fps`], ['Holds', `${s.firstDwellMs / 1000}s first, ${s.lastDwellMs / 1000}s last`],
+  const rows = extra.rows || [['Frame rate', `${s.fps} fps`], ['Holds', `${s.firstDwellMs / 1000}s first, ${s.lastDwellMs / 1000}s last`],
     ['Tilt', `${s.tilt.x}°, ${s.tilt.y}°, ${s.tilt.z}°`], ['Spin', s.spin ? `${s.spinDegPerSec}°/s` : 'off']];
   const tbl = $('ds-settings');
   tbl.replaceChildren(...rows.map(([k, v]) => { const tr = document.createElement('tr'); const th = document.createElement('th');
@@ -78,7 +82,7 @@ function setLabels(on) {
 }
 
 /**
- * Start a dataset from its playlist settings and a media URL, as a video or a still image; extra.at resumes a video that far through (a fraction), extra.paused keeps it paused, and extra.labelsOn overrides the playlist's labelvisible, for switching versions. Tested in the browser with every gallery dataset, a version switch and a dropped folder.
+ * Start a dataset from its playlist settings and a media URL, as a video or a still image; extra.at resumes a video that far through (a fraction), extra.paused keeps it paused, extra.labelsOn overrides the playlist's labelvisible, for switching versions, extra.cantPlay replaces the MPEG-4 hint when the video won't decode, and extra.onMeta sees the video once its size is known. Tested in the browser with every gallery dataset, a version switch, a dropped folder and a 360 video.
  */
 function start(settings, url, isVideo, sourceFps = 30, extra = {}) {
   unload();
@@ -114,8 +118,9 @@ function start(settings, url, isVideo, sourceFps = 30, extra = {}) {
       state.phase = 'play';
       if (!state.paused) v.play().catch(() => {});
     }
+    if (extra.onMeta) extra.onMeta(v);
   });
-  v.addEventListener('error', () => status(MPEG4_HINT));
+  v.addEventListener('error', () => status(extra.cantPlay || MPEG4_HINT));
   v.addEventListener('ended', () => { state.phase = 'last'; state.until = performance.now() + settings.lastDwellMs; });
   if ('requestVideoFrameCallback' in v) {
     const tick = () => { state.dirty = true; v.requestVideoFrameCallback(tick); };
@@ -192,26 +197,53 @@ function togglePlay() {
 }
 
 /**
- * Load a dropped or picked dataset folder: find playlist.sos, its data file, and play it locally. Tested in the browser with a dist/ folder from sos build.
+ * Take the simulator off the gallery for something opened from this device: no dataset picked, no version picker, and an address without one. Tested in the browser by test_browser.py::test_simulator_plays_a_360_video.
+ */
+function leaveGallery() {
+  $('dataset').value = '';
+  $('versions').replaceChildren();
+  $('versions').hidden = true;
+  history.replaceState(null, '', location.pathname);
+}
+
+/**
+ * Play a 360 video from this device on the sphere as it was recorded, saying when its frame isn't the 2:1 of a stitched 360 video or is too wide for this device's graphics, and what to do when the browser can't decode it; nothing is uploaded or counted. Tested in the browser by test_browser.py::test_simulator_plays_a_360_video.
+ */
+function openVideo(file) {
+  const url = URL.createObjectURL(file);
+  const settings = playbackSettings({ name: videoTitle(file.name), description: VIDEO_NOTE });
+  const hevc = document.createElement('video').canPlayType('video/mp4; codecs="hvc1"') !== '';
+  const rows = (size) => [['Size', size], ['Speed', 'as recorded']];
+  const extra = { rows: rows('…'), cantPlay: cantPlayText(hevc) };
+  extra.onMeta = (v) => {
+    describe(settings, { ...extra, rows: rows(`${v.videoWidth}×${v.videoHeight}`) });
+    const problems = frameProblems(v.videoWidth, v.videoHeight, state.globe.maxTextureSize);
+    if (problems.length) status(problems.join(' '));
+  };
+  start(settings, url, true, 30, extra);
+  state.urls.push(url);
+  leaveGallery();
+}
+
+/**
+ * Load a dropped or picked dataset folder: find playlist.sos, its data file, and play it locally; a single video without a playlist plays as a 360 video. Tested in the browser with a dist/ folder from sos build and a dropped 360 video.
  */
 async function openFiles(fileList) {
   const files = [...fileList];
   const pl = files.find((f) => f.name.toLowerCase() === 'playlist.sos');
+  if (!pl && files.length === 1 && isVideoFile(files[0].name)) { openVideo(files[0]); return; }
   const settings = playbackSettings(pl ? parsePlaylist(await pl.text()) : {});
   const data = findDataFile(files, settings.data);
   if (!data) { status('No playlist.sos with a video or image was found in that folder.'); return; }
   if (!pl) settings.name = data.name;
   const url = URL.createObjectURL(data);
-  const isVideo = /\.(mp4|m4v|webm)$/i.test(data.name);
+  const isVideo = isVideoFile(data.name);
   const lf = files.find((f) => f.name.toLowerCase() === 'labels.txt');
   // A playlist without a label line shows no labels on a sphere; a folder without a playlist shows any labels.txt.
   const labels = lf && (!pl || settings.label) ? parseLabels(await lf.text()) : [];
   start(settings, url, isVideo, 30, { labels });
   state.urls.push(url);
-  $('dataset').value = '';
-  $('versions').replaceChildren();
-  $('versions').hidden = true;
-  history.replaceState(null, '', location.pathname);
+  leaveGallery();
 }
 
 /**
@@ -250,7 +282,7 @@ async function loadGallery() {
   sel.addEventListener('change', () => pick(sel.value));
   const q = new URLSearchParams(location.search);
   if (q.get('d') || list.length) pick(q.get('d') || list[0].slug, q.get('s'), q.get('text'));
-  else { describe(playbackSettings({ name: 'No datasets yet' })); status('Drop a dataset folder here, or use Open folder.'); }
+  else { describe(playbackSettings({ name: 'No datasets yet' })); status('Drop a dataset folder or a 360 video here, or open one.'); }
 }
 
 /**
@@ -277,6 +309,8 @@ function init() {
   $('view-orbit').addEventListener('click', () => Object.assign(state.globe.view, ORBIT));
   $('view-visitor').addEventListener('click', () => Object.assign(state.globe.view, visitorView(), { fovDeg: VISITOR_FOV }));
   $('folder').addEventListener('change', (e) => openFiles(e.target.files));
+  // Cleared after each pick, so choosing the same file again reloads it.
+  $('video-file').addEventListener('change', (e) => { if (e.target.files[0]) openVideo(e.target.files[0]); e.target.value = ''; });
   const stage = $('stage');
   stage.addEventListener('dragover', (e) => { e.preventDefault(); stage.classList.add('drop'); });
   stage.addEventListener('dragleave', () => stage.classList.remove('drop'));

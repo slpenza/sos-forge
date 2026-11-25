@@ -603,6 +603,44 @@ def test_help_floor_covers_the_pinned_panel(origin_ask):
     assert not missing, f"add to help-head.html's panel floor: {', '.join('main ' + s for s in missing)}"
 
 
+def video_file(path, source):
+    """Write a 1-second H.264 MP4 from an ffmpeg lavfi source, as a camera's app might export it. Helper for test_simulator_plays_a_360_video; not itself tested."""
+    from sosforge.encode import find_ffmpeg
+    subprocess.run([find_ffmpeg(), "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", source,
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)], check=True)
+    return path
+
+
+def test_simulator_plays_a_360_video(browser, origin, tmp_path):
+    """Checks a 360 video opened from this device plays on the sphere: its name and size fill the panel, the gallery's dataset and address are cleared, and the sphere shows the video's colour, with no warning; a video that isn't 2:1 plays with a warning that says so, and a file the browser can't decode says what to do; nothing is counted or fetched. Covers simulator.js openVideo, leaveGallery and start's onMeta and cantPlay against real decoding; video360.js's checks are tested by video360.test.mjs, and a dropped file by hand."""
+    red = video_file(tmp_path / "Harbour at dawn.mp4", "color=c=red:s=512x256:d=1:r=30")
+    flat = video_file(tmp_path / "flat.mp4", "testsrc=s=320x180:d=1:r=30")
+    (tmp_path / "broken.mp4").write_bytes(b"not a video" * 100)
+    page, problems = open_page(browser, origin, "/simulator.html?d=tiny")
+    hits = []
+    page.on("request", lambda r: hits.append(r.url) if "/api/" in r.url else None)
+    page.wait_for_function("() => document.getElementById('time').textContent !== '0:00 / 0:00'", timeout=15000)
+    page.set_input_files("#video-file", str(red))
+    page.wait_for_function("() => document.querySelector('#ds-settings td')?.textContent === '512×256'", timeout=15000)
+    assert page.inner_text("#ds-name") == "Harbour at dawn" and "isn’t uploaded" in page.inner_text("#ds-desc")
+    assert page.locator("#ds-settings th").all_inner_texts() == ["Size", "Speed"]
+    assert page.input_value("#dataset") == "" and "?" not in page.url and page.is_hidden("#versions")
+    assert page.is_hidden("#status") and page.is_visible("#transport")
+    page.wait_for_timeout(600)
+    img = canvas_pixels(page)
+    h, w = img.shape[:2]
+    b, g, r = (int(x) for x in img[h // 2 - 10:h // 2 + 10, w // 2 - 10:w // 2 + 10].reshape(-1, 3).mean(axis=0))
+    assert r > 150 and g < 60 and b < 60, (b, g, r)
+    page.set_input_files("#video-file", str(flat))
+    page.wait_for_selector("#status:not([hidden])", timeout=15000)
+    assert "320×180, not the 2:1 frame" in page.inner_text("#status")
+    page.set_input_files("#video-file", str(tmp_path / "broken.mp4"))
+    page.wait_for_function("() => document.getElementById('status').textContent.includes('can’t play that video')", timeout=15000)
+    assert "as H.264" in page.inner_text("#status") and hits == []
+    assert problems == [], problems
+    page.close()
+
+
 def test_admin_sends_a_test(browser, tmp_path):
     """Checks sos admin's page in Chrome: an opened draft offers "Send a test to" the test address beside the real send, which stays off while replies wouldn't be stored; the test sends the edited email to the test address only, says nothing was filed, and leaves the editor open; and without a test address the button is off. Covers admin.html's editor over the real server with fake ports; real SES delivery is checked by hand."""
     from sosforge import noaa

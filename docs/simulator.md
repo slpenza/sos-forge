@@ -32,6 +32,22 @@ folder stays on your computer; nothing is uploaded.
 Web browsers can't play MPEG-4 Part 2, the format NOAA recommends for the sphere. Open the folder ending in
 `_h264` instead; it holds the same frames. See [Which video file to use](video-formats.md).
 
+## Preview your own 360 video
+
+Choose **Open a 360 video**, or drag the video onto the sphere. Use the stitched 360 video your camera's app exports,
+as an MP4: a frame twice as wide as it is tall. It plays as it was recorded and stays on your computer; nothing is
+uploaded.
+
+- **Seen from outside.** A sphere shows the scene from outside, as a globe shows the Earth. The sky fills the top,
+  the ground the bottom, and the camera's mount sits at the bottom pole. Footage shot outdoors from a high point
+  works best.
+- **Turning it.** Drag sideways, or use ← and →, to choose what faces the room, as with any dataset.
+- **When it won't play.** A raw file straight from the camera holds two fisheye pictures, and needs the camera's app
+  to stitch it first. Many 360 cameras record in H.265 (HEVC), which some browsers can't play: export H.264.
+- **A warning** shows when the frame isn't 2:1, or is wider than your device's graphics can show.
+
+The simulator only previews the video. It doesn't make a dataset from it for a real sphere.
+
 ## Text that stays still
 
 Datasets carry their text in two forms:

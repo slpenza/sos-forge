@@ -77,5 +77,5 @@ export function findDataFile(files, dataName) {
   const want = String(dataName || '').split('/').pop().toLowerCase();
   const byName = files.find((f) => f.name.toLowerCase() === want);
   if (byName) return byName;
-  return files.find((f) => /\.(mp4|m4v|webm|jpe?g|png)$/i.test(f.name)) || null;
+  return files.find((f) => /\.(mp4|m4v|mov|webm|jpe?g|png)$/i.test(f.name)) || null;
 }

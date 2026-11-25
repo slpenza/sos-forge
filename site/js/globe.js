@@ -96,6 +96,7 @@ export class Globe {
     this.labelBox = [0, 0, 1, 1];
     this.hasLabel = false;
     this.view = { yaw: 0, pitch: 0, distance: 3.2, fovDeg: 45 };
+    this.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);   // the widest frame upload() can show
     this.worldToBody = transpose3(orientation());
   }
 
