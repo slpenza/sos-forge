@@ -34,7 +34,7 @@ def nice_ticks(vmin: float, vmax: float, log: bool) -> list[float]:
 
 def scale01(v: np.ndarray, lo: float, hi: float, log: bool) -> np.ndarray:
     """Map values to 0..1 between lo and hi on a linear or log scale, clipping outside; on a log scale zero and below map to 0. Tested by test_v3_layers.py::test_regions_shade_by_year_with_legend and test_grid_log_scale_and_legend."""
-    v = np.asarray(v, np.float32)
+    v = np.asarray(v)   # in its own precision, as the regions layer always did: forcing float32 shifts log10(100)
     if log:
         v, lo, hi = np.log10(np.maximum(v, 1e-12)), math.log10(max(lo, 1e-12)), math.log10(max(hi, 1e-12))
     return np.clip((v - lo) / max(hi - lo, 1e-12), 0.0, 1.0)
