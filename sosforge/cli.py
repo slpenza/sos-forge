@@ -226,7 +226,8 @@ def parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_upload_help)
     p = sub.add_parser("admin", help="the local page for submitting published datasets to NOAA and keeping their replies")
     p.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "site" / "site.toml"))
-    p.add_argument("--port", type=int, default=8030)
+    p.add_argument("--port", type=int, default=8041,
+                   help="the local port (default 8041, in sos-forge's block 8040-8049; sos site --serve uses 8040)")
     p.set_defaults(fn=cmd_admin)
     return ap
 

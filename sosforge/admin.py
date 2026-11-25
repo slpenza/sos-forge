@@ -336,7 +336,10 @@ def handler(admin: Admin, token: str, port_of: Callable[[], int]) -> type:
     return Handler
 
 
-def serve(admin: Admin, port: int = 8030) -> ThreadingHTTPServer:
+ADMIN_PORT = 8041   # in sos-forge's block, 8040-8049, beside sos site --serve on 8040 (design/v0/v0.8.5.md)
+
+
+def serve(admin: Admin, port: int = ADMIN_PORT) -> ThreadingHTTPServer:
     """Return the admin page's server bound to 127.0.0.1 with a fresh token, not yet serving; port 0 picks a free one. Tested by test_admin.py::test_server_refuses_other_origins_and_tokens."""
     token = secrets.token_urlsafe(24)
     box: dict = {}

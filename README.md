@@ -171,8 +171,8 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
 - **Moving to another Ask & Answer release** is deliberate, never part of a build: take `corpus.py` from the API's
   `artifacts.base`, check it against the integrity `GET /ask` lists, run
   `python3 corpus.py --project . --lock <ask_base>`, and commit the new `ask.lock.json` with the version that moves.
-- **Submitting a dataset to NOAA's SOS Data Catalog** happens on `sos admin`, a page served only on 127.0.0.1 with
-  your own AWS login, through the aws CLI.
+- **Submitting a dataset to NOAA's SOS Data Catalog** happens on `sos admin`, a page served only on 127.0.0.1:8041
+  with your own AWS login, through the aws CLI.
   - **Drafts:** "Submit to NOAA" drafts the email NOAA's catalog page asks for, from the live `datasets.json`:
     description, notable features, credits and every zip's link. You fill in its `[[...]]` line, then send it to
     `sos.support@noaa.gov` through SES.

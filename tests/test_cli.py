@@ -112,3 +112,12 @@ def test_site_and_bundle_commands(tmp_path, monkeypatch, capsys):
     assert cli.main(["bundle", "tiny", "--dist", str(tmp_path / "dist")]) == 0
     assert capsys.readouterr().out.strip().endswith("tiny_256x128.zip")
     assert cli.main(["bundle", "nothing", "--dist", str(tmp_path / "dist")]) == 2
+
+
+def test_local_servers_use_sos_forges_ports():
+    """Checks sos site --serve defaults to 8040 and sos admin to 8041, both in sos-forge's block 8040-8049 from stevenpenza.com's port plan, and that admin.serve's own default matches the command line's. Covers parser's port defaults and admin.ADMIN_PORT; the servers binding those ports is exercised by hand."""
+    from sosforge import admin
+    site = cli.parser().parse_args(["site", "--serve"]).serve
+    adm = cli.parser().parse_args(["admin"]).port
+    assert (site, adm, admin.ADMIN_PORT) == (8040, 8041, 8041)
+    assert all(8040 <= p <= 8049 for p in (site, adm))
