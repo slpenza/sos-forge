@@ -44,5 +44,18 @@ if [ -d infra ]; then
   (cd infra && npm ci && SOSFORGE_SITE_DIR="$PWD/../build/site" npx cdk deploy SosForgeSite --require-approval never)
   # The docs Help answers from, as this tag committed them, with the corpus.py ask.lock.json pins.
   python3 -m sosforge upload-help
+  # The architecture chart for stevenpenza.com's owner page (its architecture standard; design/v0/v0.8.3.md): what CDK
+  # just synthesized plus infra/architecture.hand.json, by the shared generator copied byte for byte. It goes beside
+  # status/sos.json in the private docs bucket, named by $SOSFORGE_STATUS_BUCKET, and is never committed. By hand
+  # without that bucket it is drawn and checked, not uploaded.
+  node tools/architecture.mjs --project sos --hand infra/architecture.hand.json --commit "$(git rev-parse HEAD)" \
+    infra/cdk.out > build/architecture.json
+  if [ -n "${SOSFORGE_STATUS_BUCKET:-}" ]; then
+    aws s3 cp build/architecture.json "s3://$SOSFORGE_STATUS_BUCKET/architecture/sos.json" \
+      --content-type application/json --only-show-errors
+    echo "architecture chart uploaded: architecture/sos.json"
+  else
+    echo "SOSFORGE_STATUS_BUCKET is not set: the architecture chart was drawn, not uploaded"
+  fi
 fi
 echo "released $tag"

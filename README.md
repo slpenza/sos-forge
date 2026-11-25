@@ -163,6 +163,10 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
 - **Help's docs reach Ask & Answer only through a release.** After the site deploys, `release.sh` runs
   `sos upload-help`, which uploads the committed docs with the pinned `corpus.py` and the `ASK_UPLOAD_KEY` secret. A
   docs change is live on Help once its version is released.
+- **The architecture chart** for stevenpenza.com's owner page is drawn by each release after the deploy, from what CDK
+  synthesized and `infra/architecture.hand.json`, by `tools/architecture.mjs`: stevenpenza.com's generator, copied
+  byte for byte. It is uploaded to the private docs bucket and never committed (design/v0/v0.8.3.md). Change the hand
+  file when something outside the stack changes; a hand edge to a construct that's gone fails the tests.
 - **Moving to another Ask & Answer release** is deliberate, never part of a build: take `corpus.py` from the API's
   `artifacts.base`, check it against the integrity `GET /ask` lists, run
   `python3 corpus.py --project . --lock <ask_base>`, and commit the new `ask.lock.json` with the version that moves.
