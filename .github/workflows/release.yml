@@ -67,11 +67,14 @@ jobs:
       - name: Install
         run: python -m pip install -e ".[dev]" build
 
+      # mask-aws-account-id: the account ID is printed by CDK in the stack's ARN, and GitHub masks it from here on
+      # (design/v0/v0.8.2.md).
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
           role-session-name: sosforge-release-${{ github.run_id }}
+          mask-aws-account-id: true
 
       - name: Release
         env:

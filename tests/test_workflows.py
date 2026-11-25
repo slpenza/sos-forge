@@ -1,4 +1,4 @@
-"""Tests for the GitHub workflows: nothing private reaches a public log through a plain variable (design/v0/v0.7.4.md, v0.8.1.md)."""
+"""Tests for the GitHub workflows: nothing private reaches a public log through a plain variable (design/v0/v0.7.4.md, v0.8.1.md, v0.8.2.md)."""
 from __future__ import annotations
 
 import re
@@ -31,3 +31,14 @@ def test_no_plain_variables():
         assert not found, f"{f.name} reads {', '.join(sorted(found))} as plain variables: write a public value in, or make it a secret"
     release = (WORKFLOWS / "release.yml").read_text()
     assert {"AWS_DEPLOY_ROLE_ARN", "SOS_STATUS_BUCKET", "SOS_SUGGEST_TEST", "ASK_UPLOAD_KEY"} <= uses(release, "secrets")
+
+
+def test_aws_account_id_is_masked():
+    """Checks every step that signs in to AWS asks GitHub to mask the account ID, which CDK prints in the stack's ARN. Covers the configure-aws-credentials steps of .github/workflows/*.yml as written; that GitHub masks it is checked in the release log by hand."""
+    steps = 0
+    for f in sorted(WORKFLOWS.glob("*.yml")):
+        for block in re.split(r"\n\s*- ", f.read_text())[1:]:
+            if "aws-actions/configure-aws-credentials" in block:
+                steps += 1
+                assert re.search(r"^\s*mask-aws-account-id:\s*true\s*$", block, re.M), f"{f.name}: set mask-aws-account-id: true"
+    assert steps >= 1
