@@ -188,6 +188,7 @@ that share a code, such as a country and its territories, share its value.
 | `tracks` | `path` (glob), `attribution` | GPX, TCX, FIT (needs `pip install 'sos-forge[fit]'`) and `.gz` versions; GeoJSON lines |
 | `overpass` | `queries = [{ category, query }]`, `endpoint`, `max_age_days`, `timeout_s`, `pause_s` | Overpass QL statements; output is cached and paced |
 | `ghsl_ucdb` | none | About 11,700 urban centres with population every five years from 1975 to 2030 (GHSL R2024A; 2030 is projected). Columns `name`, `country` and `MT_POP_TOT_<year>`. Downloads 37 MB once |
+| `firms` | `satellites` (`noaa-20`, `noaa-21`), `period` (`24h`, `48h`, `7d`), `min_confidence` (`nominal`), `max_age_minutes` (60) | NASA FIRMS's VIIRS active fires from its open files, cut to the period before the latest detection; columns `frp` (fire radiative power, MW), `confidence`, `daynight`, `satellite`, `time`. Its times `fires_from` and `fires_to` are HUD values. For `points` layers |
 | `ghsl_pop` | `cells_per_degree` (12) | People per km² in 2025 from GHSL's population grid (GHS-POP R2023A), summed from 30 arcseconds into cells of 1/12° (about 9 km), with the total as `people` and `people_billions`. Downloads 484 MB once. For `grid` layers |
 | `swpc_aurora` | `max_age_minutes` | NOAA's OVATION aurora forecast: a 1° grid of the 0–100 % chance of aurora overhead. Cached 30 minutes. For `grid` layers |
 | `natural_earth` | `scale` (`50m` or `110m`) | Country shapes keyed by ISO 3166 alpha-3 code. For `regions` layers |

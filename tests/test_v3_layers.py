@@ -112,6 +112,22 @@ def test_grid_log_scale_and_legend(tmp_path):
             make_layers(make_context(r, BuildOptions(width=64, build_dir=tmp_path / "b3")))
 
 
+@register_source("test_timed_points")
+def _test_timed_points(opts, ctx):
+    """Serve two points with a named time, as the FIRMS source gives. Test source; not itself tested."""
+    from sosforge.sources.base import PointTable
+    return PointTable({"lat": np.array([10.0, -20.0]), "lon": np.array([30.0, 40.0])}, "Test fires", "PD", "t",
+                      times={"fires_to": datetime(2026, 11, 25, 19, 23, tzinfo=timezone.utc)})
+
+
+def test_points_pass_source_times(tmp_path):
+    """Checks a points layer hands its source's named times to HUD templates beside its count, so a recipe's name can carry the data's date. Covers PointsLayer.prepare's stored times and values; the FIRMS source's own times are tested by test_v3_sources.py::test_firms_reads_fires."""
+    toml = '[dataset]\nname="p"\n[[layers]]\ntype="points"\nsource={type="test_timed_points"}\n[hud]\nenabled=false\n'
+    ctx, layers, fr = setup(tmp_path, toml)
+    v = layers[0].values(ctx.timeline.at(0))
+    assert v["count"] == 2 and v["fires_to"] == datetime(2026, 11, 25, 19, 23, tzinfo=timezone.utc)
+
+
 def test_daylight_follows_the_sun(tmp_path):
     """Checks the subsolar point is day and its antipode night at a fixed moment, values report the Sun, and bad times are refused. Covers DaylightLayer prepare, render, values and when; this test is not itself tested."""
     for d in (tmp_path / "r", tmp_path / "t" / "r"):

@@ -67,6 +67,7 @@ sphere: set `[hud] mode = "labels"`, or switch them on from the iPad.
 | `aurora_forecast` | Still image: NOAA's aurora forecast over the real day and night at build time, named with its date | NOAA SWPC OVATION (public domain) |
 | `getting_richer` | 40 s, 1820 to 2022: average income per person in every country, on a log colour scale with a legend | Maddison Project Database 2023 via Our World in Data (CC BY 4.0); Natural Earth |
 | `cities_growing` | 22 s, 1975 to 2030: about 11,700 urban centres glowing by population, with projections marked | GHSL Urban Centre Database R2024A, European Commission JRC (CC BY 4.0) |
+| `fires_burning_now` | Still image: every fire detected from orbit in the 24 hours before the build, named with its date | NASA FIRMS, VIIRS on NOAA-20 and NOAA-21 |
 | `where_people_live` | Still image: how many people live where, 8.2 billion in 2025, on a log scale with a legend | GHS-POP R2023A, European Commission JRC (CC BY 4.0) |
 | `my_activities` | Still image: your GPS tracks glowing on the globe, with a zoomed inset | Your own GPX/TCX/FIT files (e.g. a fitness app's bulk export) |
 | `my_360_video` | Your 360 camera's video as a movie, as long as the clip, with its title as SOS labels | Your own stitched 360 video |

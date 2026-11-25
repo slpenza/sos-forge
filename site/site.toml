@@ -98,3 +98,11 @@ release = "data-2026-11"
 preview = "where_people_live_4k.zip"             # a still image, so one zip serves both
 downloads = ["where_people_live_4k.zip"]
 dates = "2025 estimate"
+
+[[datasets]]
+slug = "fires_burning_now"
+sources = [{ label = "NASA FIRMS", url = "https://www.earthdata.nasa.gov/data/tools/firms" }]
+release = "data-2026-11"
+preview = "fires_burning_now_4k.zip"             # a still image, so one zip serves both
+downloads = ["fires_burning_now_4k.zip"]
+dates = "24 hours to 19:23 UTC"                 # this build's window; its date is in the name, so isn't repeated

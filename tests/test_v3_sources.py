@@ -154,3 +154,48 @@ def test_ghsl_pop_sums_people(tmp_path):
     assert f.stats["people"] == pytest.approx(1557.0) and f.license == "CC-BY-4.0" and f.fingerprint == "abc:1"
     with pytest.raises(RecipeError, match="cells_per_degree must be 1 to 120"):
         ghsl.ghsl_pop({"cells_per_degree": 0}, None)
+
+
+FIRMS_HEADER = "latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,confidence,version,bright_ti5,frp,daynight\n"
+
+
+def firms_csv(rows) -> bytes:
+    """Return a FIRMS VIIRS CSV from (lat, lon, date, hhmm, confidence, frp) rows. Helper for test_firms_reads_fires; not itself tested."""
+    return (FIRMS_HEADER + "".join(f"{la},{lo},330.0,0.5,0.5,{d},{t},N20,{c},2.0NRT,295.0,{f},D\n"
+                                   for la, lo, d, t, c, f in rows)).encode()
+
+
+def test_firms_reads_fires(tmp_path, monkeypatch):
+    """Checks the FIRMS source reads both satellites' open CSVs once (then from the cache), keeps detections at or above nominal confidence from the 24 hours before the latest one, reports that window as fires_from and fires_to, keeps fire radiative power, and refuses unknown satellites, periods and confidences, a row it can't read, and files with no detections. Covers firms_url, parse_firms and firms with stubbed HTTP; the live files are exercised by building fires_burning_now."""
+    from datetime import datetime, timezone
+    from sosforge.sources import firms
+    files = {
+        "J1_VIIRS_C2": firms_csv([(10.5, 20.5, "2026-11-25", "1923", "nominal", 12.5),
+                                  (-15.0, 30.0, "2026-11-25", "0105", "high", 80.0),
+                                  (40.0, -100.0, "2026-11-24", "0000", "nominal", 5.0),    # 43 hours before: cut
+                                  (0.0, 0.0, "2026-11-25", "1200", "low", 1.0)]),          # low confidence: dropped
+        "J2_VIIRS_C2": firms_csv([(5.0, 5.0, "2026-11-24", "1924", "n", 7.0)]),             # just inside 24 hours
+    }
+    calls = []
+
+    def fake(url, **kw):
+        calls.append(url)
+        return next(v for k, v in files.items() if k in url)
+    monkeypatch.setattr(firms, "http_request", fake)
+    t = load_source({"type": "firms"}, ctx_for(tmp_path))
+    load_source({"type": "firms"}, ctx_for(tmp_path))
+    assert len(calls) == 2 and calls[0].endswith("/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv")
+    assert sorted(t.column("frp").tolist()) == [7.0, 12.5, 80.0] and "FIRMS" in t.attribution
+    to = datetime(2026, 11, 25, 19, 23, tzinfo=timezone.utc)
+    assert t.times == {"fires_from": datetime(2026, 11, 24, 19, 23, tzinfo=timezone.utc), "fires_to": to}
+    low = load_source({"type": "firms", "min_confidence": "low", "max_age_minutes": 0}, ctx_for(tmp_path))
+    assert len(low) == 4
+    for bad, match in (({"satellites": ["terra"]}, "satellites"), ({"period": "1h"}, "period"),
+                       ({"min_confidence": "medium"}, "min_confidence")):
+        with pytest.raises(RecipeError, match=match):
+            load_source({"type": "firms", **bad}, ctx_for(tmp_path))
+    with pytest.raises(RecipeError, match="unexpected FIRMS row"):
+        firms.parse_firms(FIRMS_HEADER + "x,1,2,3,4,2026-11-25,0100,N20,nominal,2,3,4,D\n")
+    files.update(J1_VIIRS_C2=FIRMS_HEADER.encode(), J2_VIIRS_C2=FIRMS_HEADER.encode())
+    with pytest.raises(RecipeError, match="no detections"):
+        load_source({"type": "firms", "max_age_minutes": 0}, ctx_for(tmp_path))

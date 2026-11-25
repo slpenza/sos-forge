@@ -1,0 +1,38 @@
+# Fires Burning Now: every fire NASA's VIIRS instruments on NOAA-20 and NOAA-21 detected from orbit in the 24 hours
+# before the build, each glowing by the heat it gave off (fire radiative power), from NASA FIRMS's open files.
+# Rebuild for a fresh day; the files are cached for an hour. The name carries the date, so a build stays true after.
+
+[dataset]
+name = "Fires Burning Now, {fires_to.day} {fires_to:%b %Y}"
+slug = "fires_burning_now"
+description = "Every fire NASA's VIIRS instruments detected from orbit in the 24 hours before this image was made, each glowing by the heat it gave off. Savanna burning, farm fires and wildfires show up together, and a few detections are gas flares and industrial heat, which satellites see the same way."
+output = "texture"
+width = 4096
+
+[playlist]
+subcategory = "Fire"
+
+[[layers]]
+type = "basemap"
+name = "blue_marble"
+brightness = 0.12
+saturation = 0.5
+
+[[layers]]
+type = "points"
+source = { type = "firms" }
+weight = "frp"
+weight_scale = "sqrt"
+weight_ref = "auto"
+color = "#ff5a1f"
+radius_km = 3
+halo_km = 30
+core_gain = 0.9
+halo_gain = 0.05
+halo_strength = 0.5
+
+[hud]
+anchors = [-20, 90, -140]   # open ocean at 30S: South Atlantic, Indian, South Pacific
+width_deg = 50              # wide enough for the subtitle to stay readable
+title = "Fires burning now"
+subtitle = "{count:,} detections in the 24 hours to {fires_to:%d %b %H:%M} UTC"
