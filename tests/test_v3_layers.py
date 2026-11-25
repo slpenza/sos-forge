@@ -117,15 +117,15 @@ def _test_timed_points(opts, ctx):
     """Serve two points with a named time, as the FIRMS source gives. Test source; not itself tested."""
     from sosforge.sources.base import PointTable
     return PointTable({"lat": np.array([10.0, -20.0]), "lon": np.array([30.0, 40.0])}, "Test fires", "PD", "t",
-                      times={"fires_to": datetime(2026, 11, 25, 19, 23, tzinfo=timezone.utc)})
+                      times={"fires_to": datetime(2026, 11, 25, 19, 23, tzinfo=timezone.utc)}, stats={"strongest": 6.8})
 
 
 def test_points_pass_source_times(tmp_path):
-    """Checks a points layer hands its source's named times to HUD templates beside its count, so a recipe's name can carry the data's date. Covers PointsLayer.prepare's stored times and values; the FIRMS source's own times are tested by test_v3_sources.py::test_firms_reads_fires."""
+    """Checks a points layer hands its source's named times and numbers to HUD templates beside its count, so a recipe's name can carry the data's date and its subtitle the strongest quake. Covers PointsLayer.prepare's stored times and stats and values; the FIRMS and USGS sources' own are tested by test_v3_sources.py::test_firms_reads_fires and test_usgs_reads_quakes."""
     toml = '[dataset]\nname="p"\n[[layers]]\ntype="points"\nsource={type="test_timed_points"}\n[hud]\nenabled=false\n'
     ctx, layers, fr = setup(tmp_path, toml)
     v = layers[0].values(ctx.timeline.at(0))
-    assert v["count"] == 2 and v["fires_to"] == datetime(2026, 11, 25, 19, 23, tzinfo=timezone.utc)
+    assert v["count"] == 2 and v["fires_to"] == datetime(2026, 11, 25, 19, 23, tzinfo=timezone.utc) and v["strongest"] == 6.8
 
 
 def test_daylight_follows_the_sun(tmp_path):
@@ -190,6 +190,9 @@ def test_regions_shade_by_year_with_legend(tmp_path):
     assert nice_ticks(500, 60000, True) == [500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0]
     assert nice_ticks(1, 1e6, True) == [1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0]
     assert nice_ticks(0, 100, False) == [0, 20, 40, 60, 80, 100]
+    assert nice_ticks(25, 85, False) == [30, 40, 50, 60, 70, 80]          # Living Longer's years: once every year, 25 to 85
+    assert all(len(nice_ticks(0, r, False)) <= 7 for r in (1, 6, 7, 13, 61, 99, 999, 12345))
+    assert nice_ticks(0, 1, False) == [0, 0.2, 0.4, 0.6, 0.8, 1.0]       # 1 / 0.2 is 4.999... in floating point
     r = load_recipe(write_recipe(tmp_path / "bad", toml.replace('scale="log"', 'scale="cube"')))
     with pytest.raises(RecipeError, match="scale"):
         make_layers(make_context(r, BuildOptions(width=64, frames=3, build_dir=tmp_path / "b4")))

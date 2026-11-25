@@ -23,13 +23,12 @@ def nice_ticks(vmin: float, vmax: float, log: bool) -> list[float]:
         if len(ticks) > 7:
             ticks = [t for t in ticks if math.log10(t).is_integer()]
         return ticks if len(ticks) >= 2 else [vmin, vmax]
-    step = 10 ** math.floor(math.log10(max(vmax - vmin, 1e-12))) / 10.0
-    for mult in (1, 2, 5, 10):
-        if (vmax - vmin) / (step * mult) <= 5:
-            step *= mult
-            break
+    # The smallest round step giving at most six ticks. Up to v0.8.8 the steps stopped at 10x, so a range of 60 found
+    # none and fell back to a step of 1: 61 ticks.
+    base = 10 ** math.floor(math.log10(max(vmax - vmin, 1e-12))) / 10.0
+    step = next(base * m for m in (1, 2, 5, 10, 20, 50, 100) if (vmax - vmin) / (base * m) <= 6)
     first = math.ceil(vmin / step) * step
-    return [round(first + k * step, 10) for k in range(int((vmax - first) // step) + 1)]
+    return [round(first + k * step, 10) for k in range(int(math.floor((vmax - first) / step + 1e-9)) + 1)]
 
 
 def scale01(v: np.ndarray, lo: float, hi: float, log: bool) -> np.ndarray:

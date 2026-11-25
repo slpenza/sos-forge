@@ -1,0 +1,41 @@
+# Living Longer: how many years a newborn could expect to live in every country, 1950 to 2023, from Our World in Data
+# (UN World Population Prospects and others, CC BY 4.0). It starts in 1950, the first year every country has an
+# estimate; grey means none. Borders are today's (Natural Earth), so early years show modern countries.
+
+[dataset]
+name = "Living Longer"
+slug = "living_longer"
+description = "How many years a baby born in each country could expect to live, from 1950 to 2023 (period life expectancy at birth). Grey means no estimate for that year; borders are today's."
+output = "movie"
+width = 4096
+
+[animation]
+frames = 900           # 73 years: 30 s at 30 fps
+fps = 30
+loop = false
+start = "1950-01-01"
+end = "2023-01-01"
+
+[playlist]
+subcategory = "People"
+
+[[layers]]
+type = "basemap"
+name = "blue_marble_relief"
+brightness = 0.25
+saturation = 0.3
+
+[[layers]]
+type = "regions"
+regions = { type = "natural_earth" }
+data = { type = "owid", slug = "life-expectancy" }
+min = 25
+max = 85
+colormap = "sea"
+legend_title = "Life expectancy at birth (years)"
+legend_format = "{:,.0f}"
+
+[hud]
+anchors = [-20, 90, -140]   # open ocean at 30S: South Atlantic, Indian, South Pacific
+title = "{year}"
+subtitle = "Life expectancy at birth"

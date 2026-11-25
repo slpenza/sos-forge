@@ -1,0 +1,38 @@
+# Earthquakes This Week: every earthquake of magnitude 4.5 or more the US Geological Survey recorded worldwide in the
+# 7 days before the build, glowing by size, over the seafloor's ridges and trenches. M4.5 is the size seismographs catch
+# everywhere; smaller quakes are recorded reliably only near dense networks, so including them would favour those
+# places. Rebuild for a fresh week; the feed is cached for 10 minutes. The name carries the date.
+
+[dataset]
+name = "Earthquakes This Week, {quakes_to.day} {quakes_to:%b %Y}"
+slug = "earthquakes_this_week"
+description = "Every earthquake of magnitude 4.5 or more recorded worldwide in the 7 days before this image was made, each glowing by its size: one step up in magnitude glows about three times as bright. Most line up along the edges of the plates that make up Earth's surface, where the seafloor shows ridges and trenches."
+output = "texture"
+width = 4096
+
+[playlist]
+subcategory = "Earth"
+
+[[layers]]
+type = "basemap"
+name = "blue_marble_relief"
+brightness = 0.2
+saturation = 0.4
+
+[[layers]]
+type = "points"
+source = { type = "usgs_quakes", feed = "4.5_week" }
+weight = "strength"
+weight_ref = 2            # about M5.1 glows at full strength; stronger ones glow wider
+color = "#ffd23f"
+radius_km = 45
+halo_km = 350
+core_gain = 1.0
+halo_gain = 0.14
+halo_strength = 0.8
+
+[hud]
+anchors = [-20, 90, -140]   # open ocean at 30S: South Atlantic, Indian, South Pacific
+width_deg = 50              # wide enough for the subtitle to stay readable
+title = "Earthquakes this week"
+subtitle = "{count} of magnitude 4.5+ to {quakes_to:%d %b}, strongest {strongest:.1f}"

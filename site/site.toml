@@ -106,3 +106,20 @@ release = "data-2026-11"
 preview = "fires_burning_now_4k.zip"             # a still image, so one zip serves both
 downloads = ["fires_burning_now_4k.zip"]
 dates = "24 hours to 19:23 UTC"                 # this build's window; its date is in the name, so isn't repeated
+
+[[datasets]]
+slug = "living_longer"
+lengths = [15, 73]
+label_style = true
+sources = [{ label = "Our World in Data: life expectancy (Riley; Zijdeman et al.; HMD; UN WPP)", url = "https://ourworldindata.org/grapher/life-expectancy" }]
+release = "data-2026-11"
+preview = "living_longer_4k_h264.zip"
+downloads = ["living_longer_4k.zip", "living_longer_4k_h264.zip"]
+
+[[datasets]]
+slug = "earthquakes_this_week"
+sources = [{ label = "U.S. Geological Survey", url = "https://earthquake.usgs.gov/earthquakes/feed/" }]
+release = "data-2026-11"
+preview = "earthquakes_this_week_4k.zip"         # a still image, so one zip serves both
+downloads = ["earthquakes_this_week_4k.zip"]
+dates = "7 days to 25 Nov"                      # this build's window

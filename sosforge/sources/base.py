@@ -20,6 +20,7 @@ class PointTable:
     license: str = ""
     fingerprint: str = ""
     times: dict = field(default_factory=dict)   # named moments for HUD templates, such as a feed's latest detection
+    stats: dict = field(default_factory=dict)   # named numbers for HUD templates, such as the strongest earthquake
 
     def __len__(self) -> int:
         """Return the number of rows. Tested by test_sources.py::test_csv_and_geojson_points."""

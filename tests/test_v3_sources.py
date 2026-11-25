@@ -199,3 +199,37 @@ def test_firms_reads_fires(tmp_path, monkeypatch):
     files.update(J1_VIIRS_C2=FIRMS_HEADER.encode(), J2_VIIRS_C2=FIRMS_HEADER.encode())
     with pytest.raises(RecipeError, match="no detections"):
         load_source({"type": "firms", "max_age_minutes": 0}, ctx_for(tmp_path))
+
+
+def usgs_doc(quakes, generated_ms=1795645454000) -> dict:
+    """Return a USGS summary feed from (lon, lat, depth, mag, type, time_ms) tuples. Helper for test_usgs_reads_quakes; not itself tested."""
+    return {"type": "FeatureCollection", "metadata": {"generated": generated_ms, "title": "test", "count": len(quakes)},
+            "features": [{"type": "Feature", "properties": {"mag": m, "place": f"near {i}", "time": t, "type": k},
+                          "geometry": {"type": "Point", "coordinates": [lo, la, d]}}
+                         for i, (lo, la, d, m, k, t) in enumerate(quakes)]}
+
+
+def test_usgs_reads_quakes(tmp_path, monkeypatch):
+    """Checks the USGS source reads a summary feed once (then from the cache) as points with magnitude, depth and a strength about three times brighter per magnitude, keeps only earthquakes with a magnitude, reports the feed's 7-day window and its strongest quake, and refuses an unknown feed, a feed with no earthquakes and a document that isn't a feed. Covers parse_feed and usgs_quakes with stubbed HTTP; the live feed is exercised by building earthquakes_this_week."""
+    from datetime import datetime, timezone
+    from sosforge.sources import usgs
+    doc = usgs_doc([(178.6, -35.9, 10.0, 4.5, "earthquake", 1795642353545), (142.0, 38.0, 30.0, 6.5, "earthquake", 1795600000000),
+                    (-118.0, 34.0, 1.0, 4.6, "quarry blast", 1795600000000), (10.0, 45.0, 5.0, None, "earthquake", 1795600000000)])
+    calls = []
+    monkeypatch.setattr(usgs, "http_request", lambda url, **kw: (calls.append(url), json.dumps(doc).encode())[1])
+    t = load_source({"type": "usgs_quakes"}, ctx_for(tmp_path))
+    load_source({"type": "usgs_quakes"}, ctx_for(tmp_path))
+    assert len(calls) == 1 and calls[0].endswith("/summary/4.5_week.geojson") and len(t) == 2
+    assert t.column("mag").tolist() == [4.5, 6.5] and t.column("depth_km").tolist() == [10.0, 30.0]
+    assert t.column("strength").tolist() == pytest.approx([1.0, 10.0])
+    assert t.stats == {"strongest": 6.5} and "Geological Survey" in t.attribution
+    made = datetime.fromtimestamp(1795645454, timezone.utc)
+    assert t.times["quakes_to"] == made and (made - t.times["quakes_from"]).days == 7
+    for feed in ("4.5_year", "big_week", "week"):
+        with pytest.raises(RecipeError, match="feed is <level>_<span>"):
+            load_source({"type": "usgs_quakes", "feed": feed}, ctx_for(tmp_path))
+    doc["features"] = []
+    with pytest.raises(RecipeError, match="no earthquakes"):
+        load_source({"type": "usgs_quakes", "max_age_minutes": 0}, ctx_for(tmp_path))
+    with pytest.raises(RecipeError, match="unexpected USGS feed"):
+        usgs.parse_feed({"features": []})

@@ -124,7 +124,7 @@ class PointsLayer(Layer):
         meta = {"names": names, "colors": colors, "counts": [int((cat == i).sum()) for i in range(len(names))],
                 "weights": [float(w[cat == i].sum()) for i in range(len(names))], "dropped": int((~ok).sum()),
                 "attribution": o["attribution"] or table.attribution, "license": table.license,
-                "weight_ref": self.ref, "times": {k: v.isoformat() for k, v in table.times.items()}}
+                "weight_ref": self.ref, "times": {k: v.isoformat() for k, v in table.times.items()}, "stats": table.stats}
         self.store.put_json("meta", meta)
         if not o["time"] and series is None:
             self.store.put("glow", np.stack([self._glow(lat[cat == i], lon[cat == i], w[cat == i])
@@ -214,7 +214,7 @@ class PointsLayer(Layer):
         return t.date.timestamp() / 86400.0 if t.date else float("inf")
 
     def values(self, t) -> dict:
-        """Return count, weight_sum, category and categories for HUD templates at this frame, plus the source's named times (such as fires_to). Tested by test_layers.py::test_points_cycle_spotlight, test_points_time_reveal and test_v3_layers.py::test_points_pass_source_times."""
+        """Return count, weight_sum, category and categories for HUD templates at this frame, plus the source's named times and numbers (such as fires_to, or strongest). Tested by test_layers.py::test_points_cycle_spotlight, test_points_time_reveal and test_v3_layers.py::test_points_pass_source_times."""
         _, label = self._segment(t)
         lat, lon, w, when, cat = self.pts
         w, vis = self._weights(t, w, when, self._now_days(t))
@@ -226,7 +226,7 @@ class PointsLayer(Layer):
         from datetime import datetime
         times = {k: datetime.fromisoformat(v) for k, v in self.meta.get("times", {}).items()}
         return {"count": int(vis.sum()), "weight_sum": float(w[vis].sum()), "category": name,
-                "categories": len(self.meta["names"]), **times}
+                "categories": len(self.meta["names"]), **times, **self.meta.get("stats", {})}
 
     def checks(self) -> list[Check]:
         """Verify the source produced usable points and report per-category counts and dropped rows. Tested by test_layers.py::test_points_static_glow_and_values."""
