@@ -28,3 +28,6 @@ recipes/my_activities/data/*
 
 # Private correspondence (outreach drafts) never belongs in this public repo
 [Oo]utreach/
+
+# The private values the pre-commit hook refuses (stevenpenza.com secrets standard); a link into ~/SOS/Outreach.
+.private-terms

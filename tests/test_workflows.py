@@ -1,13 +1,13 @@
-"""Tests for the GitHub workflows: nothing private reaches a public log through a plain variable (design/v0/v0.7.4.md)."""
+"""Tests for the GitHub workflows: nothing private reaches a public log through a plain variable (design/v0/v0.7.4.md, v0.8.1.md)."""
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
 WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
-# Variables whose values may be printed in a public log. GitHub prints every step's environment and masks only secrets,
-# so anything else, such as a private bucket or a personal address, has to come from secrets.
-PUBLIC_VARS = {"AWS_DEPLOY_ROLE_ARN", "SOS_ZONE_ID", "PYPI_PUBLISH"}
+# This repo is public, and GitHub prints every step's environment in its logs, masking only secrets. So, as
+# stevenpenza.com's secrets standard (v0.7.19) has it for every public repo, its workflows read no plain variables:
+# a public value is written into the workflow, and anything else is a secret.
 
 
 def uses(text: str, kind: str) -> set[str]:
@@ -22,12 +22,12 @@ def test_uses_ignores_comments():
     assert uses(text, "vars") == {"ONE", "THREE"} and uses(text, "secrets") == {"TWO"}
 
 
-def test_only_public_values_are_plain_variables():
-    """Checks every workflow reads as plain variables only the names allowed to appear in a public log, and the release reads the private bucket and the test address as secrets, which GitHub masks. Covers .github/workflows/*.yml as written; what GitHub prints is not tested here."""
+def test_no_plain_variables():
+    """Checks no workflow reads a plain variable outside a comment, and the release reads the deploy role, the private bucket, the test address and the upload key as secrets, which GitHub masks. Covers .github/workflows/*.yml as written; what GitHub prints is not tested here, and the drift check repeats the first half for stevenpenza.com."""
     files = sorted(WORKFLOWS.glob("*.yml"))
     assert files
     for f in files:
-        extra = uses(f.read_text(), "vars") - PUBLIC_VARS
-        assert not extra, f"{f.name} reads {', '.join(sorted(extra))} as plain variables: make them secrets"
+        found = uses(f.read_text(), "vars")
+        assert not found, f"{f.name} reads {', '.join(sorted(found))} as plain variables: write a public value in, or make it a secret"
     release = (WORKFLOWS / "release.yml").read_text()
-    assert {"SOS_STATUS_BUCKET", "SOS_SUGGEST_TEST", "ASK_UPLOAD_KEY"} <= uses(release, "secrets")
+    assert {"AWS_DEPLOY_ROLE_ARN", "SOS_STATUS_BUCKET", "SOS_SUGGEST_TEST", "ASK_UPLOAD_KEY"} <= uses(release, "secrets")

@@ -46,6 +46,12 @@ MSG
   exit 1
 fi
 
+# Refuse an added line holding a value listed in .private-terms, the
+# project's own ignored list of what must never appear publicly
+# (design/v0/v0.7.19.md). It names the file and line, never the value, and
+# does nothing in a repo with no list.
+python3 "$(git rev-parse --show-toplevel)/tools/private_terms.py" || exit 1
+
 # Refuse a code change that scopes no version, and a scope doc with no code.
 #
 # The rule used to live in CLAUDE.md, where it applied to whichever commit
