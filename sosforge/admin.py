@@ -217,7 +217,7 @@ class Admin:
         if value not in DESTINATIONS:
             raise ValueError(f"suggestions go to one of {', '.join(DESTINATIONS)}")
         if value == "test" and not self.ports.suggest_targets().get("test"):
-            raise ValueError("no test address is deployed: set the production variable SOS_SUGGEST_TEST, then release")
+            raise ValueError("no test address is deployed: set the production secret SOS_SUGGEST_TEST, then release")
         self.ports.set_destination(value)
         return self.suggest_state()
 

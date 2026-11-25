@@ -51,7 +51,7 @@ README has the exact commands and checksums).
 
 - **Anonymous counts** of page views and Download clicks, with no cookie or identifier, when `[site] count` is on.
   Every five minutes a Lambda publishes them as `status/sos.json` for stevenpenza.com's dashboard, when the production
-  variable `SOS_STATUS_BUCKET` names its bucket (design/v0/v0.7.0.md)
+  secret `SOS_STATUS_BUCKET` names its bucket (design/v0/v0.7.0.md)
 
 `infra/` deploys it, but only from a pushed version tag (see design/v0/v0.2.0.md).
 

@@ -6,13 +6,14 @@
 # the GitHub Release, builds sos.stevenpenza.com and deploys it with CDK. The job runs in the `production`
 # environment, which admits only v* tags, and AWS trusts only that environment (sosforge-deploy-role).
 #
-# The production environment holds:
+# The production environment holds, as variables only what may be public, since GitHub prints every step's
+# environment in this public repo's logs and masks only secrets (design/v0/v0.7.4.md; tests/test_workflows.py):
 #   vars.AWS_DEPLOY_ROLE_ARN  sosforge-deploy-role's ARN (the account stack's sosforgeDeployRoleArn output)
 #   vars.SOS_ZONE_ID          optional: the stevenpenza.com zone ID, which skips a lookup
-#   vars.SOS_STATUS_BUCKET    stevenpenza.com's private dashboard bucket, where the stack publishes status/sos.json
-#                             (design/v0/v0.7.0.md); its name stays out of the public repo
-#   vars.SOS_SUGGEST_TEST     optional: a test address Suggest a dataset may send to instead of sos@stevenpenza.com,
-#                             chosen by the sos admin page's switch (design/v0/v0.7.2.md); out of the public repo
+#   secrets.SOS_STATUS_BUCKET stevenpenza.com's private dashboard bucket, where the stack publishes status/sos.json
+#                             (design/v0/v0.7.0.md); its name stays out of the public repo and its logs
+#   secrets.SOS_SUGGEST_TEST  optional: a test address Suggest a dataset may send to instead of sos@stevenpenza.com,
+#                             chosen by the sos admin page's switch (design/v0/v0.7.2.md); out of the repo and logs
 #   secrets.ASK_UPLOAD_KEY    sos's Ask & Answer upload key: each release uploads the help docs it committed
 #                             (design/v0/v0.4.10.md). The build fetches the release ask.lock.json pins from
 #                             site/site.toml's ask_base and checks every file against the lock (design/v0/v0.4.2.md).
@@ -74,8 +75,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOS_ZONE_ID: ${{ vars.SOS_ZONE_ID }}
           ASK_UPLOAD_KEY: ${{ secrets.ASK_UPLOAD_KEY }}
-          SOSFORGE_SUGGEST_TEST: ${{ vars.SOS_SUGGEST_TEST }}
-          SOSFORGE_STATUS_BUCKET: ${{ vars.SOS_STATUS_BUCKET }}
+          SOSFORGE_SUGGEST_TEST: ${{ secrets.SOS_SUGGEST_TEST }}
+          SOSFORGE_STATUS_BUCKET: ${{ secrets.SOS_STATUS_BUCKET }}
         run: ./tools/release.sh
 
       # The deployed site in headless Google Chrome: every page loads clean under its real CSP, and every download on
