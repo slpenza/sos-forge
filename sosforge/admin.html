@@ -100,11 +100,25 @@ function editor(d, box, draft) {
       settle(d.slug, d.thread.length);
     } catch (e) { err.textContent = e.message; armed = false; send.textContent = `Send to ${draft.to}`; send.disabled = !state.ready; }
   });
+  // A test (design/v0/v0.7.3.md): the same email to the test address only, so the editor stays open for the real send.
+  const test = el('button', '', state.test_to ? `Send a test to ${state.test_to}` : 'Send a test to me'); test.type = 'button';
+  test.disabled = !state.test_to;
+  if (!state.test_to) test.title = 'Set SOSFORGE_TEST_TO in .env.local and restart sos admin';
+  test.addEventListener('click', async () => {
+    err.textContent = ''; note.textContent = '';
+    armed = false; send.textContent = `Send to ${draft.to}`;
+    test.disabled = true;
+    try {
+      await api('/api/send', { slug: d.slug, subject: subject.value, body: body.value, reply: draft.reply, test: true });
+      note.textContent = `Test sent to ${state.test_to}. Nothing was filed, so ${d.name} is still unsent. Don't reply to it.`;
+    } catch (e) { err.textContent = e.message; }
+    test.disabled = false;
+  });
   cancel.addEventListener('click', () => box.replaceChildren());
   const lab = (text, f) => { const l = el('label', '', text); l.htmlFor = f.id; return l; };
-  const actions = el('div', 'actions'); actions.append(send, cancel);
+  const actions = el('div', 'actions'); actions.append(send, test, cancel);
   box.append(el('div', 'meta', `To ${draft.to}, with a copy to ${state.sender}`), lab('Subject', subject), subject,
-             lab('Message', body), body, actions, err);
+             lab('Message', body), body, actions, err, note);
 }
 
 function catalogForm(d, box) {

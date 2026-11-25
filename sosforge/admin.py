@@ -2,9 +2,10 @@
 
 It runs on 127.0.0.1 with the maintainer's own AWS login, through the aws CLI, so the public site has no button,
 no login and nothing anyone else can press (design/v0/v0.5.0.md). Every POST needs the page's per-run token, and
-mail can only go to NOAA's catalog address. A submission is sent from the address in SOSFORGE_ADMIN_FROM with a copy
-to itself, so the copy and every reply land in the mail store that address's receipt rule writes to, where this page
-files them under their dataset. The pure parts are sosforge/noaa.py.
+mail can only go to NOAA's catalog address, or as a test to the maintainer's own SOSFORGE_TEST_TO
+(design/v0/v0.7.3.md). A submission is sent from the address in SOSFORGE_ADMIN_FROM with a copy to itself, so the copy
+and every reply land in the mail store that address's receipt rule writes to, where this page files them under their
+dataset. A test goes only to the test address, so nothing is filed. The pure parts are sosforge/noaa.py.
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ import base64
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -32,17 +34,20 @@ LOG = logging.getLogger(__name__)
 PAGE = Path(__file__).with_name("admin.html")
 ENV = {"address": "SOSFORGE_ADMIN_FROM", "name": "SOSFORGE_ADMIN_NAME", "bucket": "SOSFORGE_MAIL_BUCKET",
        "prefix": "SOSFORGE_MAIL_PREFIX"}
+TEST_TO = "SOSFORGE_TEST_TO"   # optional: where "Send a test to me" goes instead of NOAA (design/v0/v0.7.3.md)
+ADDRESS = re.compile(r"[^@\s,;<>\"]+@[^@\s,;<>\"]+\.[^@\s,;<>\"]+")
 
 
 @dataclass
 class Config:
-    """What `sos admin` needs to know: who sends, where that address's mail is stored, and which site it serves."""
+    """What `sos admin` needs to know: who sends, where that address's mail is stored, which site it serves, and where a test goes."""
     address: str
     name: str
     bucket: str
     prefix: str
     domain: str
     site_toml: Path
+    test_to: str = ""
 
 
 @dataclass
@@ -60,15 +65,22 @@ class Ports:
 
 
 def load_config(site_toml: Path, env: dict | None = None) -> Config:
-    """Read the sending address, its name and its mail store from the environment (.env.local is loaded first) and the site's domain from site.toml, refusing with the names of any missing settings. Tested by test_admin.py::test_config_names_missing_settings."""
+    """Read the sending address, its name, its mail store and the optional test address from the environment (.env.local is loaded first) and the site's domain from site.toml, refusing with the names of any missing settings and a test address that isn't one address or is the sending one. Tested by test_admin.py::test_config_names_missing_settings."""
     env = os.environ if env is None else env
     missing = [v for v in ENV.values() if not env.get(v, "").strip()]
     if missing:
         raise RecipeError(f"sos admin needs {', '.join(missing)} (put them in .env.local)")
     domain = tomllib.loads(Path(site_toml).read_text())["site"]["domain"]
     prefix = env[ENV["prefix"]].strip()
-    return Config(address=env[ENV["address"]].strip(), name=env[ENV["name"]].strip(), bucket=env[ENV["bucket"]].strip(),
-                  prefix=prefix if prefix.endswith("/") else prefix + "/", domain=domain, site_toml=Path(site_toml))
+    address, test_to = env[ENV["address"]].strip(), env.get(TEST_TO, "").strip()
+    if test_to and not ADDRESS.fullmatch(test_to):
+        raise RecipeError(f"{TEST_TO} must be one email address")
+    if test_to.lower() == address.lower():
+        # Its copy would be stored with the NOAA mail; the test is for seeing the email as NOAA would, elsewhere.
+        raise RecipeError(f"{TEST_TO} must be an address other than {ENV['address']}")
+    return Config(address=address, name=env[ENV["name"]].strip(), bucket=env[ENV["bucket"]].strip(),
+                  prefix=prefix if prefix.endswith("/") else prefix + "/", domain=domain, site_toml=Path(site_toml),
+                  test_to=test_to)
 
 
 def aws(*args: str) -> str:
@@ -183,10 +195,11 @@ class Admin:
         return datasets, noaa.file_mail(mails, datasets, self.cfg.address)
 
     def state(self) -> dict:
-        """Return what the page shows: whether replies would be stored, each dataset with its status, catalog link and thread, the site's suggestions newest first, then mail that names no dataset. Tested by test_admin.py::test_admin_files_drafts_sends_and_records."""
+        """Return what the page shows: whether replies would be stored, where a test goes, each dataset with its status, catalog link and thread, the site's suggestions newest first, then mail that names no dataset. Tested by test_admin.py::test_admin_files_drafts_sends_and_records."""
         datasets, filed = self.filed()
         cats = catalogs(self.cfg.site_toml)
         return {"sender": self.cfg.address, "noaa": noaa.NOAA_ADDRESS, "ready": self.ports.inbound_ready(self.cfg.address),
+                "test_to": self.cfg.test_to or None,
                 "datasets": [{"slug": d["slug"], "name": d["name"], "catalog": cats.get(d["slug"]),
                               "status": noaa.status(filed[d["slug"]], cats.get(d["slug"])), "thread": filed[d["slug"]]}
                              for d in datasets],
@@ -223,22 +236,28 @@ class Admin:
         return {"to": noaa.NOAA_ADDRESS, "subject": subject, "reply": last["key"],
                 "body": f"\n\n{self.cfg.name}\n\nOn {last['date'][:10]}, {last['from']} wrote:\n{quoted}"}
 
-    def send(self, slug: str, subject: str, body: str, reply: str | None) -> str:
-        """Send one email about a dataset to NOAA, copied to the sending address, refusing while replies wouldn't be stored or the text still holds [[...]] lines. Tested by test_admin.py::test_admin_files_drafts_sends_and_records."""
+    def send(self, slug: str, subject: str, body: str, reply: str | None, test: bool = False) -> str:
+        """Send one email about a dataset to NOAA, copied to the sending address, refusing while replies wouldn't be stored, the text still holds [[...]] lines, or `test` isn't true or false; as a test, send the same email only to the test address, marked and uncopied so nothing is filed. Tested by test_admin.py::test_admin_files_drafts_sends_and_records and test_send_a_test."""
+        if not isinstance(test, bool):   # a malformed flag must never fall through to a real send
+            raise ValueError("test is true or false")
         if not subject.strip() or not body.strip():
             raise ValueError("write a subject and a message")
         left = noaa.unfilled(subject + "\n" + body)
         if left:
             raise ValueError(f"fill in or remove: {', '.join(left)}")
-        if not self.ports.inbound_ready(self.cfg.address):
+        if test and not self.cfg.test_to:
+            raise ValueError(f"no test address: set {TEST_TO} in .env.local and restart sos admin")
+        # A test expects no reply, so it needn't wait for replies to be stored.
+        if not test and not self.ports.inbound_ready(self.cfg.address):
             raise PermissionError(f"mail to {self.cfg.address} isn't being stored in s3://{self.cfg.bucket}/{self.cfg.prefix} "
                                   "yet, so NOAA's reply would be lost; nothing was sent")
         datasets, filed = self.filed()
         if slug not in {d["slug"] for d in datasets}:
             raise KeyError(slug)
         answering = next((m for m in filed[slug] if m["key"] == reply), None) if reply else None
-        msg = noaa.message(self.sender, noaa.NOAA_ADDRESS, subject.strip(), body, slug, answering)
-        return self.ports.send(msg.as_bytes(), self.cfg.address, [noaa.NOAA_ADDRESS], [self.cfg.address])
+        to = self.cfg.test_to if test else noaa.NOAA_ADDRESS
+        msg = noaa.message(self.sender, to, subject.strip(), body, slug, answering, test=test)
+        return self.ports.send(msg.as_bytes(), self.cfg.address, [to], [] if test else [self.cfg.address])
 
     def record_catalog(self, slug: str, url: str) -> None:
         """Write a dataset's NOAA catalog link into site.toml, for the maintainer to commit with the next version. Tested by test_admin.py::test_admin_files_drafts_sends_and_records."""
@@ -275,6 +294,10 @@ def handler(admin: Admin, token: str, port_of: Callable[[], int]) -> type:
                 return self.reply(403, {"error": "not a local request"})
             if self.path in ("/", "/index.html"):
                 return self.reply(200, page, "text/html")
+            if self.path == "/favicon.ico":   # the browser asks for one; an empty answer keeps its console clean
+                self.send_response(204)
+                self.end_headers()
+                return None
             if self.path == "/api/state":
                 if not secrets.compare_digest(self.headers.get("X-Admin-Token", ""), token):
                     return self.reply(403, {"error": "missing or wrong token"})
@@ -291,7 +314,8 @@ def handler(admin: Admin, token: str, port_of: Callable[[], int]) -> type:
             actions = {
                 "/api/draft": lambda: admin.draft(body.get("slug", "")),
                 "/api/send": lambda: {"message_id": admin.send(body.get("slug", ""), body.get("subject", ""),
-                                                               body.get("body", ""), body.get("reply"))},
+                                                               body.get("body", ""), body.get("reply"),
+                                                               test=body.get("test", False))},
                 "/api/catalog": lambda: admin.record_catalog(body.get("slug", ""), body.get("url", "")) or {"ok": True},
                 "/api/suggest-to": lambda: admin.set_destination(body.get("destination", "")),
             }

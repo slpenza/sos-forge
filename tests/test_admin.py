@@ -43,13 +43,21 @@ def setup(tmp_path):
 
 
 def test_config_names_missing_settings(tmp_path):
-    """Checks sos admin refuses to start without its four settings, naming the missing ones, and reads the site's domain from site.toml with the mail prefix ending in a slash. Covers load_config; .env.local loading is tested by test_cli.py::test_env_local_loaded_without_override."""
+    """Checks sos admin refuses to start without its four settings, naming the missing ones, reads the site's domain from site.toml with the mail prefix ending in a slash, and reads the optional test address, refusing one that is a list or the sending address. Covers load_config; .env.local loading is tested by test_cli.py::test_env_local_loaded_without_override."""
     (tmp_path / "site.toml").write_text(SITE)
     with pytest.raises(RecipeError, match="SOSFORGE_MAIL_BUCKET, SOSFORGE_MAIL_PREFIX"):
         load_config(tmp_path / "site.toml", {"SOSFORGE_ADMIN_FROM": "sos@example.org", "SOSFORGE_ADMIN_NAME": "Pat"})
     cfg = load_config(tmp_path / "site.toml", {"SOSFORGE_ADMIN_FROM": "sos@example.org", "SOSFORGE_ADMIN_NAME": "Pat",
                                                 "SOSFORGE_MAIL_BUCKET": "b", "SOSFORGE_MAIL_PREFIX": "mail/sos"})
-    assert (cfg.domain, cfg.prefix, cfg.address) == ("sos.example.org", "mail/sos/", "sos@example.org")
+    assert (cfg.domain, cfg.prefix, cfg.address, cfg.test_to) == ("sos.example.org", "mail/sos/", "sos@example.org", "")
+    env = {"SOSFORGE_ADMIN_FROM": "sos@example.org", "SOSFORGE_ADMIN_NAME": "Pat", "SOSFORGE_MAIL_BUCKET": "b",
+           "SOSFORGE_MAIL_PREFIX": "mail/sos/"}
+    assert load_config(tmp_path / "site.toml", {**env, "SOSFORGE_TEST_TO": " tester@example.net "}).test_to == "tester@example.net"
+    for bad in ("tester@example.net, other@example.net", "Pat <tester@example.net>", "not-an-address"):
+        with pytest.raises(RecipeError, match="one email address"):
+            load_config(tmp_path / "site.toml", {**env, "SOSFORGE_TEST_TO": bad})
+    with pytest.raises(RecipeError, match="other than SOSFORGE_ADMIN_FROM"):
+        load_config(tmp_path / "site.toml", {**env, "SOSFORGE_TEST_TO": "SOS@example.org"})
 
 
 def test_rule_stores_reads_the_rule_set():
@@ -114,6 +122,30 @@ def test_admin_files_drafts_sends_and_records(setup):
     assert [m["key"] for m in st["datasets"][0]["thread"]] == ["mail/sos/1", "mail/sos/2"] and st["unfiled"] == []
 
 
+def test_send_a_test(setup):
+    """Checks a test send: refused with the setting's name while no test address is set, and refused with [[...]] lines like a real send; once set it goes even while replies wouldn't be stored, only to the test address with no copy, as the same subject and text marked as a test; and a stored copy of it would still leave the dataset unsent, with the next draft the submission. Covers Admin.send's test path and state's test_to; the email arriving is checked by hand with sos admin."""
+    admin, fake = setup
+    d = admin.draft("gr")
+    body = noaa.FILL.sub("The 1820s start nearly level.", d["body"])
+    assert admin.state()["test_to"] is None
+    with pytest.raises(ValueError, match="SOSFORGE_TEST_TO"):
+        admin.send("gr", d["subject"], body, None, test=True)
+    admin.cfg.test_to = "tester@example.net"
+    with pytest.raises(ValueError, match="fill in or remove"):
+        admin.send("gr", d["subject"], d["body"], None, test=True)
+    assert fake.sent == [] and fake.ready is False and admin.state()["test_to"] == "tester@example.net"
+    assert admin.send("gr", d["subject"], body, None, test=True) == "ses-1"
+    data, sender, to, bcc = fake.sent[0]
+    sent = email.message_from_bytes(data, policy=email.policy.default)
+    assert (sender, to, bcc) == ("sos@example.org", ["tester@example.net"], [])
+    assert sent["To"] == "tester@example.net" and sent["Subject"] == d["subject"] and sent.get_content().strip() == body.strip()
+    assert sent[noaa.TEST_HEADER] == "1" and sent[noaa.DATASET_HEADER] == "gr"
+    fake.mail["mail/sos/t"] = data
+    st = admin.state()
+    assert st["datasets"][0]["status"] == "Not submitted" and [m["key"] for m in st["unfiled"]] == ["mail/sos/t"]
+    assert admin.draft("gr")["reply"] is None
+
+
 def test_suggestion_switch(tmp_path):
     """Checks the switch for where the site's suggestions go: state shows the current one with both deployed addresses, "test" is refused while no test address is deployed and any value but mailbox or test is refused, a switch writes the setting and returns the new state, and a failure to read it shows as unavailable rather than a guess. Covers Admin.suggest_state and set_destination with fake ports; the aws CLI ports are exercised by sos admin, and the Lambda's reading by infra/test/suggest.test.mjs."""
     (tmp_path / "site.toml").write_text(SITE)
@@ -164,7 +196,7 @@ def call(port, method, path, *, token=None, host=None, origin=None, body=None):
 
 
 def test_server_refuses_other_origins_and_tokens(setup):
-    """Checks the server answers only local requests: the page carries this run's token; the API refuses a missing or wrong token, another site's Origin, and a foreign Host (DNS rebinding); a send while mail isn't stored is a 409 that sends nothing; the suggestion switch needs the token and refuses a test address that isn't deployed; unknown paths are 404. Covers serve and handler; a real browser's behaviour is not tested."""
+    """Checks the server answers only local requests: the page carries this run's token; the API refuses a missing or wrong token, another site's Origin, and a foreign Host (DNS rebinding); a send while mail isn't stored is a 409 that sends nothing, while a test goes once a test address is set and not before, and a test flag that isn't true or false is refused rather than sent; the suggestion switch needs the token and refuses a test address that isn't deployed; the favicon request gets an empty answer; unknown paths are 404. Covers serve and handler; a real browser's behaviour is not tested."""
     admin, fake = setup
     srv = serve(admin, 0)
     port, token = srv.server_address[1], srv.token
@@ -173,6 +205,7 @@ def test_server_refuses_other_origins_and_tokens(setup):
         status, page = call(port, "GET", "/")
         assert status == 200 and f"const TOKEN = '{token}';" in page
         assert call(port, "GET", "/", host="evil.example")[0] == 403
+        assert call(port, "GET", "/favicon.ico")[0] == 204
         assert call(port, "GET", "/api/state")[0] == 403
         assert call(port, "GET", "/api/state", token="wrong")[0] == 403
         status, st = call(port, "GET", "/api/state", token=token)
@@ -184,6 +217,13 @@ def test_server_refuses_other_origins_and_tokens(setup):
         status, err = call(port, "POST", "/api/send", token=token,
                            body={"slug": "gr", "subject": "S", "body": "filled in"})
         assert status == 409 and "nothing was sent" in err["error"] and fake.sent == []
+        test = {"slug": "gr", "subject": "S", "body": "filled in", "test": True}
+        assert call(port, "POST", "/api/send", token=token, body=test)[0] == 400 and fake.sent == []
+        admin.cfg.test_to = "tester@example.net"
+        assert call(port, "POST", "/api/send", body=test)[0] == 403 and fake.sent == []
+        status, ok = call(port, "POST", "/api/send", token=token, body=test)
+        assert status == 200 and ok["message_id"] == "ses-1" and fake.sent[0][2:] == (["tester@example.net"], [])
+        assert call(port, "POST", "/api/send", token=token, body={**test, "test": "yes"})[0] == 400 and len(fake.sent) == 1
         assert call(port, "POST", "/api/catalog", token=token, body={"slug": "gr", "url": "https://x.example/"})[0] == 400
         assert call(port, "POST", "/api/nope", token=token, body={})[0] == 404
         assert call(port, "POST", "/api/suggest-to", token=token, body={"destination": "test"})[0] == 400

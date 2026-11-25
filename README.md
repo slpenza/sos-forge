@@ -174,9 +174,11 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
   - **The record:** each email goes with a copy to the sending address. The page files that copy and every reply
     under its dataset, from the S3 prefix where that address's receipt rule stores its mail.
   - **Safety:** sending stays off until such a rule exists, so a reply can't be lost. The page can only write to
-    NOAA's address.
+    NOAA's address, or to your own test address.
+  - **A test first:** "Send a test to …" sends the same email to the address in `SOSFORGE_TEST_TO` instead of NOAA,
+    marked as a test and without the copy, so nothing is filed and the dataset stays unsent (design/v0/v0.7.3.md).
   - **Settings:** in `.env.local`, which git ignores: `SOSFORGE_ADMIN_FROM`, `SOSFORGE_ADMIN_NAME`,
-    `SOSFORGE_MAIL_BUCKET` and `SOSFORGE_MAIL_PREFIX`.
+    `SOSFORGE_MAIL_BUCKET` and `SOSFORGE_MAIL_PREFIX`, and optionally `SOSFORGE_TEST_TO`.
   - **Acceptance:** when NOAA accepts a dataset, "Record catalog link" writes `noaa_catalog = "<its catalog page>"`
     into `site/site.toml`. Commit that, and the card links it. The correspondence never enters the repo.
 

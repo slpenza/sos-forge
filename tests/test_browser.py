@@ -572,3 +572,39 @@ def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
     assert help_width == home_width == 720, (help_width, home_width)
     plain, _ = open_page(browser, origin, "/")
     assert plain.locator("#ask-box").count() == 0 and plain.locator('link[href="ask/ask-panel.css"]').count() == 0
+
+
+def test_admin_sends_a_test(browser, tmp_path):
+    """Checks sos admin's page in Chrome: an opened draft offers "Send a test to" the test address beside the real send, which stays off while replies wouldn't be stored; the test sends the edited email to the test address only, says nothing was filed, and leaves the editor open; and without a test address the button is off. Covers admin.html's editor over the real server with fake ports; real SES delivery is checked by hand."""
+    from sosforge import noaa
+    from sosforge.admin import Admin, Config, serve as serve_admin
+    from test_admin import Fake
+    from test_noaa import SITE
+    (tmp_path / "site.toml").write_text(SITE)
+    fake = Fake()
+    admin = Admin(Config(address="sos@example.org", name="Pat Maker", bucket="b", prefix="mail/sos/",
+                         domain="sos.example.org", site_toml=tmp_path / "site.toml", test_to="tester@example.net"), fake.ports())
+    srv = serve_admin(admin, 0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        page, problems = open_page(browser, url, "/")
+        page.click("#ds-gr button:has-text('Submit to NOAA')")
+        page.wait_for_selector("#body-gr")
+        body = noaa.FILL.sub("The 1820s start nearly level.", admin.draft("gr")["body"])
+        page.fill("#body-gr", body)
+        assert page.is_disabled("#ds-gr button:has-text('Send to sos.support@noaa.gov')")
+        page.click("#ds-gr button:has-text('Send a test to tester@example.net')")
+        page.wait_for_selector("#ds-gr .note:has-text('Test sent to tester@example.net')")
+        assert "still unsent" in page.inner_text("#ds-gr .note") and page.is_visible("#body-gr")
+        assert len(fake.sent) == 1 and fake.sent[0][2:] == (["tester@example.net"], [])
+        assert "nearly level" in fake.sent[0][0].decode()
+        admin.cfg.test_to = ""
+        page.click("#refresh")
+        page.click("#ds-gr button:has-text('Submit to NOAA')")
+        page.wait_for_selector("#ds-gr button:has-text('Send a test to me')")
+        assert page.is_disabled("#ds-gr button:has-text('Send a test to me')")
+        assert problems == []
+        page.close()
+    finally:
+        srv.shutdown()

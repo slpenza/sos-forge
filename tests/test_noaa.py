@@ -54,10 +54,13 @@ def test_draft_follows_noaa_checklist():
 
 
 def test_message_is_marked_and_threaded():
-    """Checks a sent email is from the sending address under its name, to NOAA, carries the dataset's slug, has a Message-ID on the sender's domain, and answers a filed message with In-Reply-To and References built from its References, or its In-Reply-To when it has none. Covers message; how SES rewrites the Message-ID is not tested."""
+    """Checks a sent email is from the sending address under its name, to NOAA, carries the dataset's slug, has a Message-ID on the sender's domain, answers a filed message with In-Reply-To and References built from its References, or its In-Reply-To when it has none, and carries the test mark only when asked. Covers message; how SES rewrites the Message-ID is not tested."""
     m = noaa.message(SENDER, noaa.NOAA_ADDRESS, "Hi", "Body\n", "gr")
     assert m["From"] == "Pat Maker <sos@example.org>" and m["To"] == "sos.support@noaa.gov"
     assert m[noaa.DATASET_HEADER] == "gr" and m["Message-ID"].endswith("@example.org>") and m["In-Reply-To"] is None
+    assert m[noaa.TEST_HEADER] is None
+    t = noaa.message(SENDER, "tester@example.net", "Hi", "Body\n", "gr", test=True)
+    assert t[noaa.TEST_HEADER] == "1" and t["To"] == "tester@example.net" and t[noaa.DATASET_HEADER] == "gr"
     r = noaa.message(SENDER, noaa.NOAA_ADDRESS, "Re: Hi", "Thanks\n", "gr",
                      {"message_id": "<b@noaa.gov>", "references": ["<a@ses>"]})
     assert r["In-Reply-To"] == "<b@noaa.gov>" and r["References"] == "<a@ses> <b@noaa.gov>"
@@ -66,12 +69,14 @@ def test_message_is_marked_and_threaded():
     assert bare["References"] == "<a@ses> <b@noaa.gov>"
 
 
-def raw(frm, subject, when, mid, *, dataset=None, reply=None, refs=None, html=False, body="Hello", suggestion=False):
+def raw(frm, subject, when, mid, *, dataset=None, reply=None, refs=None, html=False, body="Hello", suggestion=False,
+        test=False):
     """Return a stored email's bytes as the receipt rule would keep it. Helper for test_mail_files_under_its_dataset; not itself tested."""
     lines = [f"From: {frm}", "To: sos@example.org", f"Subject: {subject}", f"Date: {email.utils.format_datetime(when)}",
              f"Message-ID: {mid}"]
     lines += [f"{noaa.DATASET_HEADER}: {dataset}"] if dataset else []
     lines += [f"{noaa.SUGGESTION_HEADER}: 1"] if suggestion else []
+    lines += [f"{noaa.TEST_HEADER}: 1"] if test else []
     lines += [f"In-Reply-To: {reply}"] if reply else []
     lines += [f"References: {refs}"] if refs else []
     lines += ["MIME-Version: 1.0", f"Content-Type: text/{'html' if html else 'plain'}; charset=utf-8", "", body]
@@ -79,7 +84,7 @@ def raw(frm, subject, when, mid, *, dataset=None, reply=None, refs=None, html=Fa
 
 
 def test_mail_files_under_its_dataset():
-    """Checks stored mail files under its dataset: the sent copy by its mark, NOAA's reply by In-Reply-To, a reply to that reply by References, a mail naming a dataset in its subject by name, a site suggestion by its own mark even when its subject names a dataset, and anything else as unfiled; HTML text is readable and each dataset's status follows its thread. Covers parse_mail, text_of, file_mail and status; real NOAA mail formats are not tested."""
+    """Checks stored mail files under its dataset: the sent copy by its mark, NOAA's reply by In-Reply-To, a reply to that reply by References, a mail naming a dataset in its subject by name, a site suggestion by its own mark even when its subject names a dataset, a test send as unfiled even though it carries a dataset's mark, and anything else as unfiled; HTML text is readable and each dataset's status follows its thread. Covers parse_mail, text_of, file_mail and status; real NOAA mail formats are not tested."""
     from datetime import datetime, timedelta, timezone
     t0 = datetime(2026, 11, 25, 15, tzinfo=timezone.utc)
     mails = [
@@ -94,11 +99,14 @@ def test_mail_files_under_its_dataset():
         noaa.parse_mail(raw("Spam <s@s.s>", "Win a prize", t0, "<s@s.s>"), "k5"),
         noaa.parse_mail(raw("SOS Forge suggestions <sos-suggest@example.org>", "Dataset suggestion: Getting Richer, by region",
                             t0 + timedelta(days=4), "<sg@example.org>", suggestion=True), "k6"),
+        noaa.parse_mail(raw("Pat Maker <sos@example.org>", "Dataset for the SOS Data Catalog: Aurora Forecast",
+                            t0 + timedelta(days=5), "<test@email.amazonses.com>", dataset="aurora", test=True), "k7"),
     ]
     assert mails[1]["text"] == "Thanks & welcome.\nWe'll review it." and mails[0]["dataset"] == "gr"
     filed = noaa.file_mail(mails, [MOVIE, STILL], "sos@example.org")
     assert [m["key"] for m in filed["gr"]] == ["k1", "k2", "k3"] and [m["ours"] for m in filed["gr"]] == [True, False, False]
-    assert [m["key"] for m in filed["aurora"]] == ["k4"] and [m["key"] for m in filed[""]] == ["k5"]
+    assert [m["key"] for m in filed["aurora"]] == ["k4"] and [m["key"] for m in filed[""]] == ["k5", "k7"]
+    assert mails[6]["test"] and not mails[0]["test"]
     assert [m["key"] for m in filed[noaa.SUGGESTIONS]] == ["k6"] and mails[5]["suggestion"] and not mails[0]["suggestion"]
     assert noaa.status(filed["gr"], None) == "NOAA replied 2026-11-28"
     assert noaa.status(filed["gr"][:1], None) == "Sent 2026-11-25"

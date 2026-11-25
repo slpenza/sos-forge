@@ -16,6 +16,7 @@ from email.message import EmailMessage
 NOAA_ADDRESS = "sos.support@noaa.gov"
 DATASET_HEADER = "X-SOS-Forge-Dataset"
 SUGGESTION_HEADER = "X-SOS-Forge-Suggestion"   # set by the site's Suggest a dataset form (design/v0/v0.6.0.md)
+TEST_HEADER = "X-SOS-Forge-Test"               # a test send from sos admin, never a submission (design/v0/v0.7.3.md)
 SUGGESTIONS = "@suggestions"                    # file_mail's key for them; "@" can't start a slug
 CATALOG_PREFIX = "https://sos.noaa.gov/"
 FILL = re.compile(r"\[\[[^\]]*\]\]")
@@ -104,8 +105,9 @@ def unfilled(text: str) -> list[str]:
     return FILL.findall(text)
 
 
-def message(sender: dict, to: str, subject: str, body: str, slug: str, reply_to: dict | None = None) -> EmailMessage:
-    """Return the email to send for a dataset: from the sending address, marked with the dataset's slug so the copy kept for that address files itself, and threaded under `reply_to` (a filed message) when it answers one. Tested by test_noaa.py::test_message_is_marked_and_threaded."""
+def message(sender: dict, to: str, subject: str, body: str, slug: str, reply_to: dict | None = None,
+            test: bool = False) -> EmailMessage:
+    """Return the email to send for a dataset: from the sending address, marked with the dataset's slug so the copy kept for that address files itself, threaded under `reply_to` (a filed message) when it answers one, and marked as a test when `test` is set. Tested by test_noaa.py::test_message_is_marked_and_threaded."""
     m = EmailMessage()
     m["From"] = email.utils.formataddr((sender["name"], sender["address"]))
     m["To"] = to
@@ -113,6 +115,8 @@ def message(sender: dict, to: str, subject: str, body: str, slug: str, reply_to:
     m["Date"] = email.utils.formatdate(localtime=False)
     m["Message-ID"] = email.utils.make_msgid(domain=sender["address"].split("@")[1])
     m[DATASET_HEADER] = slug
+    if test:
+        m[TEST_HEADER] = "1"
     if reply_to and reply_to.get("message_id"):
         m["In-Reply-To"] = reply_to["message_id"]
         # RFC 5322: the parent's References, or its In-Reply-To when it has none, then the parent itself.
@@ -135,7 +139,7 @@ def text_of(msg: email.message.EmailMessage) -> str:
 
 
 def parse_mail(raw: bytes, key: str = "") -> dict:
-    """Return the parts of a stored email the admin page files and shows: ids, threading, sender, recipients, date, subject, dataset mark and text. Tested by test_noaa.py::test_mail_files_under_its_dataset."""
+    """Return the parts of a stored email the admin page files and shows: ids, threading, sender, recipients, date, subject, dataset, suggestion and test marks, and text. Tested by test_noaa.py::test_mail_files_under_its_dataset."""
     msg = email.message_from_bytes(raw, policy=email.policy.default)
     when = email.utils.parsedate_to_datetime(msg["Date"]) if msg["Date"] else None
     return {
@@ -149,12 +153,13 @@ def parse_mail(raw: bytes, key: str = "") -> dict:
         "subject": str(msg["Subject"] or ""),
         "dataset": (msg[DATASET_HEADER] or "").strip(),
         "suggestion": bool((msg[SUGGESTION_HEADER] or "").strip()),
+        "test": bool((msg[TEST_HEADER] or "").strip()),
         "text": text_of(msg),
     }
 
 
 def file_mail(mails: list[dict], datasets: list[dict], sender_address: str) -> dict:
-    """Return {slug: [mail, ...], SUGGESTIONS: [...], "": [unfiled]} in date order: a site suggestion by its mark first, then a sent copy by its dataset mark, a reply by the message it answers, else by a dataset's name in the subject; each mail gains `ours`. Tested by test_noaa.py::test_mail_files_under_its_dataset."""
+    """Return {slug: [mail, ...], SUGGESTIONS: [...], "": [unfiled]} in date order: a site suggestion by its mark first, a test send as unfiled so it never counts as a submission, then a sent copy by its dataset mark, a reply by the message it answers, else by a dataset's name in the subject; each mail gains `ours`. Tested by test_noaa.py::test_mail_files_under_its_dataset."""
     names = sorted(((d["name"].lower(), d["slug"]) for d in datasets), key=lambda x: -len(x[0]))
     slugs = {d["slug"] for d in datasets}
     thread_of: dict[str, str] = {}
@@ -165,6 +170,9 @@ def file_mail(mails: list[dict], datasets: list[dict], sender_address: str) -> d
         m = {**m, "ours": sender_address.lower() in m["from"].lower()}
         if m.get("suggestion"):   # before any name match: a suggestion may name a dataset without being NOAA's mail
             out[SUGGESTIONS].append(m)
+            continue
+        if m.get("test"):   # a test carries its dataset's mark, but filing it there would make the dataset look sent
+            out[""].append(m)
             continue
         slug = m["dataset"] if m["dataset"] in slugs else ""
         if not slug:
