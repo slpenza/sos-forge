@@ -1,0 +1,26 @@
+# My 360 Video: your own 360 camera footage as a movie for the sphere (design/v0/v0.8.4.md).
+# 1. Export the stitched 360 video from your camera's app: a 2:1 MP4. A raw file of two fisheye pictures won't do.
+# 2. Copy it into recipes/my_360_video/data/ (gitignored: never committed). Keep one video there.
+# 3. Look at it first in the simulator (Open a 360 video), then: sos build my_360_video
+# A sphere shows the scene from outside: the sky fills the top, the ground the bottom, the camera's mount the bottom pole.
+
+[dataset]
+name = "My 360 Video"
+slug = "my_360_video"
+description = "A 360 video on the sphere, seen from outside: the sky fills the top and the ground the bottom."
+output = "movie"
+width = 4096
+
+[animation]
+frames = 0     # as long as the video, at its own speed; sos build --seconds N fits the whole clip into N seconds
+fps = 30
+loop = false
+
+[[layers]]
+type = "video"
+path = "data/*"
+# credit = "Footage: your name"
+
+[hud]
+mode = "labels"   # the title as SOS labels, which the sphere draws, not painted over the footage
+title = "{name}"

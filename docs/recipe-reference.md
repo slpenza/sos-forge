@@ -27,7 +27,7 @@ Unknown keys are errors, and the error suggests the closest valid key.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `frames` | `720` | Frame count |
+| `frames` | `720` | Frame count. `0` takes the length from a `video` layer: as long as the clip, at its own speed |
 | `fps` | `30` | Frame rate (also written to `playlist.sos`) |
 | `loop` | `true` | `true`: frame i is at i/frames, never repeating frame 0. `false`: the last frame is the final state |
 | `start`, `end` | none | Dates (`"YYYY-MM-DD"` or `"today"`) mapped across the frames; enables time-based layers |
@@ -90,6 +90,17 @@ Set exactly one of:
 - `color`: `"#rrggbb"`
 
 Optional: `brightness`, `saturation`, `opacity`, `credit`.
+
+### `video`
+
+A 360 video as the movie's picture: the stitched 2:1 video a 360 camera's app exports (MP4, MOV, M4V, WebM or MKV),
+decoded at the output size.
+- `path`: the video, or a pattern such as `"data/*"` that matches exactly one.
+- Optional: `credit`, for the footage.
+
+The whole clip spans the movie. With `[animation] frames = 0` the movie is as long as the clip, so it plays at its
+recorded speed; `sos build --seconds N` fits the whole clip into N seconds. A video that isn't 2:1 is refused. The
+`my_360_video` recipe is a ready-made one.
 
 ### `points`
 

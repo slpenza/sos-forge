@@ -46,7 +46,8 @@ uploaded.
   to stitch it first. Many 360 cameras record in H.265 (HEVC), which some browsers can't play: export H.264.
 - **A warning** shows when the frame isn't 2:1, or is wider than your device's graphics can show.
 
-The simulator only previews the video. It doesn't make a dataset from it for a real sphere.
+The simulator only previews the video. To make a dataset from it for a real sphere, put it in
+`recipes/my_360_video/data/` and run `sos build my_360_video`: see the recipe's own notes.
 
 ## Text that stays still
 

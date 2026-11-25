@@ -19,6 +19,8 @@ infra/cdk.context.json
 recipes/*/data/private/
 recipes/my_activities/data/*
 !recipes/my_activities/data/README.md
+recipes/my_360_video/data/*
+!recipes/my_360_video/data/README.md
 .env
 .env.*
 !.env.example

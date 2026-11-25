@@ -89,8 +89,17 @@ def length_tag(recipe: Recipe, ctx: BuildContext, opts: BuildOptions) -> int | N
     return int(opts.seconds)
 
 
+def layer_frames(recipe: Recipe, fps: int) -> int:
+    """Return the frame count a layer sets for a movie whose [animation] frames is 0, such as a video's own length, refusing a recipe with no layer that can. Tested by test_video.py::test_build_a_360_video and test_frames_zero_needs_a_video."""
+    for spec in recipe.layers:
+        cls = LAYERS[spec["type"]]
+        if hasattr(cls, "frames_for"):
+            return int(cls.frames_for(spec, recipe, fps))
+    raise RecipeError("[animation] frames = 0 takes the length from a layer that has one, such as a video; set frames instead")
+
+
 def make_context(recipe: Recipe, opts: BuildOptions) -> BuildContext:
-    """Resolve resolution, frame count and folders for a build from the recipe and overrides. Tested by test_build.py::test_texture_build_end_to_end."""
+    """Resolve resolution, frame count and folders for a build from the recipe and overrides; [animation] frames = 0 asks a layer, such as a video, for the length. Tested by test_build.py::test_texture_build_end_to_end and test_video.py::test_build_a_360_video."""
     width = PREVIEW_WIDTH if opts.preview else int(opts.width or recipe.dataset["width"])
     if width % 4 or width < 64:
         raise RecipeError("width must be a multiple of 4 and >= 64")
@@ -104,6 +113,8 @@ def make_context(recipe: Recipe, opts: BuildOptions) -> BuildContext:
         if int(opts.seconds) < 1:
             raise RecipeError("--seconds must be a whole number of seconds, 1 or more")
     frames = (int(opts.seconds) * fps if opts.seconds else int(opts.frames or a["frames"])) if recipe.is_movie else 1
+    if frames == 0:
+        frames = layer_frames(recipe, fps)
     timeline = Timeline(frames, fps, bool(a["loop"]) if recipe.is_movie else False, a["start"], a["end"])
     return BuildContext(recipe, width, timeline, Path(opts.build_dir) / recipe.slug / f"{width}x{width // 2}",
                         max(1, opts.workers), opts.refresh)
