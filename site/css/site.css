@@ -14,7 +14,7 @@
   --doc-rule: var(--rule); --doc-rule-soft: var(--panel-2); --doc-rule-strong: var(--faint); --doc-code-bg: var(--panel-2);
   --doc-accent: var(--accent); --doc-accent-hover: #ffd27a; --doc-font-sans: var(--font); --doc-font-mono: var(--mono);
   --ask-bg: var(--panel); --ask-field-bg: var(--panel-2); --ask-dim: var(--faint); --ask-on-accent: var(--accent-ink);
-  --ask-hue: var(--accent); --ask-size: 17px;
+  --ask-hue: var(--accent); --ask-size: 17px; --ask-min-size: 14px;   /* the floor, Ask & Answer's since v0.23.0 */
 }
 * { box-sizing: border-box; }
 /* 17px base, and nothing smaller than .85rem (about 14.5px) anywhere: the site's readers include older visitors. */
@@ -142,8 +142,6 @@ body.sim { display: flex; flex-direction: column; min-height: 100dvh; }
 .changes .ver { color: var(--faint); font-family: var(--mono); font-size: .85rem; }
 .changes a.ver:hover { color: var(--accent); }
 
-/* Ask & Answer's box on the home page: its Ask button is a ratio of --ask-size, held to the site's floor. */
-.home-ask .ask-boxbtn { font-size: max(14px, .78em); }
 
 /* Suggest a dataset (design/v0/v0.6.0.md): one column of labelled fields that fills a phone and stops at a readable width. */
 .suggest { display: grid; gap: 20px; max-width: 640px; }

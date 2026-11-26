@@ -26,7 +26,7 @@ count = true                     # pages send anonymous view and download counts
 bar = "./site/help-bar.html"
 title = { site = "SOS Forge", section = "Help" }
 layout = "desk"                  # the question box first, recent and common questions, then the topics, one column
-ask = { heading = "Ask about sos-forge", lede = "Answers come from these pages and quote the lines they rely on.", suggestions = 5 }
+ask = { heading = "Ask about sos-forge", lede = "Answers come from these pages and quote the lines they rely on.", suggestions = 5, showHeading = false }   # the heading stays for screen readers; the bar already says Help
 
 [[help.groups]]
 name = "Getting started"

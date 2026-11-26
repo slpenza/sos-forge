@@ -33,6 +33,8 @@
     --ask-ok-fg: #5fd39e;
     --ask-hue: #ffb000;
     --ask-size: 17px;
+    /* No panel text under 14px, in any state: Ask & Answer's own floor since its v0.23.0 (design/v0/v0.8.10.md). */
+    --ask-min-size: 14px;
     /* The site's 17px base: every Help text size is a ratio of these (design/v0/v0.5.3.md). */
     --doc-size: 17px;
     --doc-leading: 1.7;
@@ -42,40 +44,12 @@
   /* The question box at the home page's width on a wide screen (site.css .cta .home-ask), lined up with the text
      under it; on a phone it fills the row as before. */
   main .ask-panel .ask-askform { max-width: 720px; }
-  /* The panel's heading stays for screen readers and goes from the screen: the bar already says Help. */
-  .ask-panel .ask-hd { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip: rect(0 0 0 0);
-    white-space: nowrap; }
   /* Nothing under 14px: the topic list's group names, file names and summaries, and code. */
   main .idx h2 { font-size: 14px; }
   main .pages a { font-size: 17px; }
   main .pages a > small { font-size: 14px; }
   main .pages a > .sum { font-size: 15.5px; line-height: 1.55; }
   main .doc code, main .doc pre code { font-size: max(14px, .8125em); }
-  /* And none in the panel, in any state: every rule of the pinned ask-panel.css under 14px at 17px, one per line
-     (design/v0/v0.7.4.md). test_browser.py::test_help_floor_covers_the_pinned_panel checks this list against the
-     pinned file, so a release that adds a small rule fails until it is here. */
-  main .ask-panel .ask-askbtn,
-  main .ask-panel .ask-astate p,
-  main .ask-panel .ask-cite figcaption,
-  main .ask-panel .ask-cite .ask-illname,
-  main .ask-panel .ask-corpushead,
-  main .ask-panel .ask-each,
-  main .ask-panel .ask-elapsed,
-  main .ask-panel .ask-klabel,
-  main .ask-panel .ask-mark,
-  main .ask-panel .ask-phead .ask-ppage,
-  main .ask-panel .ask-qecho .ask-q,
-  main .ask-panel .ask-retry,
-  main .ask-panel .ask-rn,
-  main .ask-panel .ask-rnone,
-  main .ask-panel .ask-rq .ask-q,
-  main .ask-panel .ask-rq .ask-when,
-  main .ask-panel .ask-sent .ask-lab,
-  main .ask-panel .ask-srcrow .ask-len,
-  main .ask-panel .ask-srcrow .ask-unread,
-  main .ask-panel .ask-ticket div,
-  main .ask-panel .ask-tot,
-  main .ask-panel .ask-wtext { font-size: 14px; }
   .sf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding: 12px 20px; }
   .sf-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--doc-fg); font-weight: 700; text-decoration: none; }
   .sf-nav { display: flex; flex-wrap: wrap; gap: 4px 18px; }

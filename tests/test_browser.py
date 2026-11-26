@@ -72,7 +72,7 @@ HELP_FRAME = """
 bar = "./site/help-bar.html"
 title = { site = "SOS Forge", section = "Help" }
 layout = "desk"
-ask = { heading = "Ask about sos-forge", suggestions = 3 }
+ask = { heading = "Ask about sos-forge", suggestions = 3, showHeading = false }
 """
 
 
@@ -399,7 +399,7 @@ def test_whats_new_lists_visitor_changes(browser, origin):
 SMALLEST_TEXT = """() => {
   let min = [99, ''];
   for (const e of document.querySelectorAll('body *')) {
-    if (!e.offsetParent || e.matches('.sr-only, .ask-hd') || e.closest('[aria-hidden="true"]')) continue;
+    if (!e.offsetParent || e.matches('.sr-only, .ask-sr, .ask-hd') || e.closest('[aria-hidden="true"]')) continue;
     if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
     const px = parseFloat(getComputedStyle(e).fontSize);
     if (px < min[0]) min = [px, e.tagName.toLowerCase() + '.' + e.className + ' ' + e.textContent.trim().slice(0, 20)];
@@ -544,7 +544,7 @@ def test_download_urls_cover_every_choice(origin):
 
 
 def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
-    """Checks the home page shows Ask & Answer's box beside "Read the help" with no errors, that asking takes the reader to /help/#ask=<question>, that Help takes the question out of the address and shows the desk layout's panel with no text under 14 px, before the answer and in the error state the refusal leaves, its heading kept only for screen readers and its question box the home page's width, and that a build without Ask & Answer has no box. Covers js/ask.js, the pinned box() and the help layout under the deployed CSPs; the API refuses localhost, so no question is really asked."""
+    """Checks the home page shows Ask & Answer's box beside "Read the help" with no errors, that asking takes the reader to /help/#ask=<question>, that Help takes the question out of the address and shows the desk layout's panel with no text under 14 px, before the answer and in the error state the refusal leaves, its heading kept only for screen readers by the frame's showHeading = false, which site.toml sets, and its question box the home page's width, and that a build without Ask & Answer has no box. Covers js/ask.js, the pinned box() and the help layout under the deployed CSPs; the API refuses localhost, so no question is really asked."""
     url, _ = origin_ask
     page, problems = open_page(browser, url, "/")
     box = page.locator("#ask-box.ask-box")
@@ -571,6 +571,8 @@ def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
     assert px >= 14 - 0.05, f"help after the refusal: {px}px at {where}"
     heading = page.locator(".ask-panel .ask-hd")
     assert heading.count() == 1 and heading.evaluate("e => e.getBoundingClientRect().height") <= 1
+    import tomllib
+    assert tomllib.loads((site.REPO_ROOT / "site" / "site.toml").read_text())["help"]["ask"]["showHeading"] is False
     # Help's question box is the home page's width on a wide screen (design/v0/v0.5.4.md).
     help_width = page.locator(".ask-panel .ask-askform").evaluate("e => Math.round(e.getBoundingClientRect().width)")
     assert help_width == home_width == 720, (help_width, home_width)
@@ -579,28 +581,25 @@ def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
 
 
 def small_panel_rules(css: str, base_px: float = 17) -> set[str]:
-    """Return each panel selector whose own font-size is under 14 px at the site's 17 px, from a stylesheet's text. Helper for test_help_floor_covers_the_pinned_panel; checked there against the real pinned file."""
+    """Return each panel selector with a fixed font-size under 14 px at the site's 17 px, from a stylesheet's text; a size written with --ask-min-size isn't fixed. Helper for test_pinned_panel_honours_the_minimum; checked there against the real pinned file."""
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
     small = set()
     for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
         m = re.search(r"font-size:\s*([0-9.]+)(em|rem|px)\b", body)
         if m and float(m[1]) * (1 if m[2] == "px" else base_px) < 14 - 0.05:
-            small |= {" ".join(s.split()) for s in selectors.split(",") if s.strip().startswith(".ask-panel")}
+            small |= {" ".join(s.split()) for s in selectors.split(",") if s.strip().startswith(".ask-")}
     return small
 
 
-def test_help_floor_covers_the_pinned_panel(origin_ask):
-    """Checks site/help-head.html raises to 14 px every rule of the pinned release's ask-panel.css that is under 14 px at the site's 17 px, so no state of the panel (an answer, its sources, an error) shows smaller text, and a pin that adds a small rule fails here. Covers help-head.html's floor list against the real pinned file; the home box's sizes are site.css's, tested by test_no_text_is_smaller_than_14px."""
+def test_pinned_panel_honours_the_minimum(origin_ask):
+    """Checks the pinned Ask & Answer panel writes every size under 1em with its --ask-min-size floor and has no fixed size under 14 px at the site's 17 px, and that both sos-forge stylesheets that hold the panel (Help's head and the home page's) set that floor to 14 px; so no state of the panel shows smaller text, and a pin that adds a fixed small size fails here. Covers help-head.html, site.css and the pinned ask-panel.css; the sizes as drawn are measured by test_home_ask_box_hands_the_question_to_help."""
     import urllib.request
     url, _ = origin_ask
     with urllib.request.urlopen(f"{url}/ask/ask-panel.css") as r:
-        small = small_panel_rules(r.read().decode())
-    assert ".ask-panel .ask-retry" in small and len(small) > 10
-    head = (site.REPO_ROOT / "site" / "help-head.html").read_text()
-    floor = next(b for b in re.findall(r"([^{}]+)\{\s*font-size:\s*14px;\s*\}", head) if ".ask-retry" in b)
-    covered = {" ".join(s.split()) for s in re.sub(r"/\*.*?\*/", "", floor, flags=re.S).split(",")}
-    missing = sorted(s for s in small if f"main {s}" not in covered)
-    assert not missing, f"add to help-head.html's panel floor: {', '.join('main ' + s for s in missing)}"
+        css = r.read().decode()
+    assert "var(--ask-min-size" in css and small_panel_rules(css) == set()
+    for f in ("help-head.html", "css/site.css"):
+        assert re.search(r"--ask-min-size:\s*14px", (site.REPO_ROOT / "site" / f).read_text()), f
 
 
 def video_file(path, source):
