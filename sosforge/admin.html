@@ -151,9 +151,13 @@ function section(d) {
   write.addEventListener('click', async () => {
     try { editor(d, box, await api('/api/draft', { slug: d.slug })); } catch (e) { box.replaceChildren(el('p', 'error', e.message)); }
   });
-  const cat = el('button', '', d.catalog ? 'Change catalog link' : 'Record catalog link'); cat.type = 'button';
-  cat.addEventListener('click', () => catalogForm(d, box));
-  const actions = el('div', 'actions'); actions.append(write, cat);
+  const actions = el('div', 'actions'); actions.append(write);
+  // A catalog link only follows a submission, so the button waits until this dataset has a thread (or a link already).
+  if (d.catalog || d.thread.length) {
+    const cat = el('button', '', d.catalog ? 'Change catalog link' : 'Record catalog link'); cat.type = 'button';
+    cat.addEventListener('click', () => catalogForm(d, box));
+    actions.append(cat);
+  }
   s.append(actions, box);
   return s;
 }

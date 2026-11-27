@@ -48,6 +48,11 @@ main.narrow { max-width: 860px; }
 .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 /* The question box: the same cap as Help's (site/help-head.html), so the two match on a wide screen. */
 .cta .home-ask { flex: 1 1 720px; min-width: 0; max-width: 720px; }
+/* Its Ask button drawn as the site's .btn (Download, Read the help) instead of Ask & Answer's own spaced mono style,
+   keeping the field's height. Restyled by class, so test_home_ask_box_hands_the_question_to_help compares the two. */
+.cta .ask-box .ask-boxbtn { padding: 0 14px; border-color: var(--rule); border-radius: 8px; background: var(--panel-2);
+  font-family: var(--font); font-size: max(var(--ask-min-size), .95rem); letter-spacing: normal; }
+.cta .ask-box .ask-boxbtn:hover { border-color: var(--faint); }
 
 .grid { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 .card { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }

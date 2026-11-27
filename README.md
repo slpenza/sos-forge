@@ -188,6 +188,7 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
   - **Settings:** in `.env.local`, which git ignores: `SOSFORGE_ADMIN_FROM`, `SOSFORGE_ADMIN_NAME`,
     `SOSFORGE_MAIL_BUCKET` and `SOSFORGE_MAIL_PREFIX`, and optionally `SOSFORGE_TEST_TO`.
   - **Acceptance:** when NOAA accepts a dataset, "Record catalog link" writes `noaa_catalog = "<its catalog page>"`
-    into sos-site's `site.toml`. Commit that there, and the card links it. The correspondence never enters a repo.
+    into sos-site's `site.toml`. Commit that there, and the card links it. The button appears once the dataset has
+    a thread. The correspondence never enters a repo.
 
 MIT licence. Built for NOAA SOS sites, museums and science centres.

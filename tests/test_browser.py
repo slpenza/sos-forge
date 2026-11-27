@@ -546,13 +546,17 @@ def test_download_urls_cover_every_choice(origin):
 
 
 def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
-    """Checks the home page shows Ask & Answer's box beside "Read the help" with no errors, that asking takes the reader to /help/#ask=<question>, that Help takes the question out of the address and shows the desk layout's panel with no text under 14 px, before the answer and in the error state the refusal leaves, its heading kept only for screen readers by the frame's showHeading = false, which site.toml sets, and its question box the home page's width, and that a build without Ask & Answer has no box. Covers js/ask.js, the pinned box() and the help layout under the deployed CSPs; the API refuses localhost, so no question is really asked."""
+    """Checks the home page shows Ask & Answer's box beside "Read the help", its only button, with no errors and its Ask button drawn as the site's .btn, that asking takes the reader to /help/#ask=<question>, that Help takes the question out of the address and shows the desk layout's panel with no text under 14 px, before the answer and in the error state the refusal leaves, its heading kept only for screen readers by the frame's showHeading = false, which site.toml sets, and its question box the home page's width, and that a build without Ask & Answer has no box. Covers js/ask.js, the pinned box() and the help layout under the deployed CSPs; the API refuses localhost, so no question is really asked."""
     url, _ = origin_ask
     page, problems = open_page(browser, url, "/")
     box = page.locator("#ask-box.ask-box")
     box.wait_for(state="visible")
     home_width = box.evaluate("e => Math.round(e.getBoundingClientRect().width)")
     assert box.locator("input").count() == 1 and box.locator("button").inner_text() == "Ask"
+    look = """e => { const s = getComputedStyle(e); return [s.borderRadius, s.backgroundColor, s.borderTopColor, s.color,
+      s.fontFamily, s.fontSize, s.fontWeight, s.letterSpacing, s.paddingLeft]; }"""
+    assert box.locator("button").evaluate(look) == page.locator(".cta a.btn").evaluate(look)
+    assert page.locator(".cta a.btn").all_inner_texts() == ["Read the help"]
     assert page.locator('link[href="ask/ask-panel.css"]').count() == 1
     assert problems == []
     seen = []
@@ -671,6 +675,35 @@ def test_admin_sends_a_test(browser, tmp_path):
         page.click("#ds-gr button:has-text('Submit to NOAA')")
         page.wait_for_selector("#ds-gr button:has-text('Send a test to me')")
         assert page.is_disabled("#ds-gr button:has-text('Send a test to me')")
+        assert problems == []
+        page.close()
+    finally:
+        srv.shutdown()
+
+
+def test_admin_offers_catalog_link_once_sent(browser, tmp_path):
+    """Checks sos admin's page offers "Record catalog link" only once a dataset has a thread, and "Change catalog link" wherever a link is already recorded: none on an unsent dataset, then the button once its stored copy arrives. Covers admin.html's section over the real server with fake ports; recording a link is tested by test_admin.py."""
+    from datetime import datetime, timezone
+
+    from sosforge.admin import Admin, Config, serve as serve_admin
+    from test_admin import Fake
+    from test_noaa import SITE, raw
+    (tmp_path / "site.toml").write_text(SITE)
+    fake = Fake()
+    admin = Admin(Config(address="sos@example.org", name="Pat Maker", bucket="b", prefix="mail/sos/",
+                         domain="sos.example.org", site_toml=tmp_path / "site.toml"), fake.ports())
+    srv = serve_admin(admin, 0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        page, problems = open_page(browser, f"http://127.0.0.1:{srv.server_address[1]}", "/")
+        page.wait_for_selector("#ds-gr button:has-text('Submit to NOAA')")
+        assert page.locator("#ds-gr button:has-text('catalog link')").count() == 0
+        assert page.locator("#ds-aurora button").all_inner_texts() == ["Submit to NOAA", "Change catalog link"]
+        fake.mail["mail/sos/1"] = raw("Pat Maker <sos@example.org>", "Dataset for the SOS Data Catalog: Getting Richer",
+                                      datetime(2026, 11, 27, tzinfo=timezone.utc), "<a@example.org>", dataset="gr")
+        page.click("#refresh")
+        page.wait_for_selector("#ds-gr button:has-text('Record catalog link')")
+        assert page.locator("#ds-gr button").all_inner_texts() == ["Write to NOAA", "Record catalog link"]
         assert problems == []
         page.close()
     finally:
