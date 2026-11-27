@@ -1,5 +1,5 @@
 // Suggest a dataset (design/v0/v0.6.0.md): the form on suggest.html. It checks what the server checks
-// (infra/lambda/suggest/index.mjs) so a visitor hears about a missing field at once, then posts JSON to /api/suggest on
+// (sos-site's infra/lambda/suggest/index.mjs) so a visitor hears about a missing field at once, then posts JSON to /api/suggest on
 // this origin. The checks are pure and tested by suggest.test.mjs; the page is tested in the browser.
 
 export const LICENCES = ['CC0 1.0', 'CC BY 4.0', 'CC BY-SA 4.0', 'ODbL 1.0', 'Public domain (a US Government work)',

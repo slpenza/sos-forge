@@ -167,7 +167,7 @@ def aws_ports(cfg: Config) -> Ports:
     return Ports(manifest, list_mail, get_mail, send, inbound_ready, suggest_targets, destination, set_destination)
 
 
-DESTINATION_PARAM = "/sosforge/suggest/destination"   # read by infra/lambda/suggest at send time (design/v0/v0.7.2.md)
+DESTINATION_PARAM = "/sosforge/suggest/destination"   # read by sos-site's infra/lambda/suggest at send time (design/v0/v0.7.2.md)
 DESTINATIONS = ("mailbox", "test")
 
 

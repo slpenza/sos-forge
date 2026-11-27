@@ -10,9 +10,6 @@ __pycache__/
 build/
 dist/
 dist-pkg/
-infra/node_modules/
-infra/cdk.out/
-infra/cdk.context.json
 *.part
 
 # Personal data: never commit activity exports or tokens

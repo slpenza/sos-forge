@@ -31,7 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SITE_KEYS = {"domain", "repo", "ask_base", "ask_projects", "preview_width", "count"}
 DATASET_KEYS = {"slug", "release", "preview", "downloads", "dist", "dates", "lengths", "per", "label_style", "sources",
                 "noaa_catalog"}
-STATIC_SKIP = (".test.mjs", "help-head.html", "help-bar.html", "site.toml")
+STATIC_SKIP = (".test.mjs", "help-head.html", "help-bar.html", "site.toml", "csp.mjs")
 PANEL_FILES = ("ask-client.js", "ask-panel.js", "ask-panel.css")
 ASK_LOCK = Path(__file__).resolve().parents[1] / "ask.lock.json"   # the pinned Ask & Answer release (design/v0/v0.4.2.md)
 HELP_KEYS = {"bar", "title", "groups", "landing", "layout", "ask"}
@@ -503,9 +503,17 @@ def point_help_at_docs(out: Path, repo: str) -> int:
     return changed
 
 
+def site_changes(repo: Path, notes_url: str, others: tuple = ()) -> list[dict]:
+    """Return What's new's versions: this repo's, linked to their release notes, merged newest first with each other repo's, named "site vX.Y.Z" and unlinked because the deployment's repo is private. Tested by test_changes.py::test_site_changes_merge_the_deployments."""
+    versions = visitor_changes(repo, notes_url)
+    for other in others:
+        versions += [{**v, "version": f"site {v['version']}", "notes": ""} for v in visitor_changes(Path(other))]
+    return sorted(versions, key=lambda v: v["date"], reverse=True)
+
+
 def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_base: str | None = None,
-               check_downloads: bool = False, ask_lock_path: Path | None = None) -> dict:
-    """Assemble the whole site into `out` and return the manifest written as datasets.json; ask_base defaults to site.toml's, and an empty one builds without Ask & Answer. Tested by test_site.py::test_build_site_end_to_end."""
+               check_downloads: bool = False, ask_lock_path: Path | None = None, changes_from: tuple = ()) -> dict:
+    """Assemble the whole site into `out` and return the manifest written as datasets.json; ask_base defaults to site.toml's, an empty one builds without Ask & Answer, and changes_from names other repos (the deployment's) whose released For visitors lines join What's new. Tested by test_site.py::test_build_site_end_to_end."""
     cfg = load_config(config_path)
     ask_base = cfg["ask_base"] if ask_base is None else ask_base
     if check_downloads:
@@ -549,8 +557,9 @@ def build_site(config_path: Path, out: Path, *, dist: Path | None = None, ask_ba
         LOG.info("dataset %s ready", d["slug"])
     manifest = {"datasets": entries}
     (out / "datasets.json").write_text(json.dumps(manifest, indent=1))
-    # What's new: the For visitors lines of every released version (design/v0/v0.5.1.md).
-    changes = visitor_changes(REPO_ROOT, f"https://github.com/{cfg['repo']}/releases/tag/")
+    # What's new: the For visitors lines of every released version (design/v0/v0.5.1.md), sos-forge's and the
+    # deployment's (design/v0/v0.9.0.md).
+    changes = site_changes(REPO_ROOT, f"https://github.com/{cfg['repo']}/releases/tag/", changes_from)
     if not changes:
         LOG.warning("no released version has a For visitors section (are the v* tags fetched?): What's new is empty")
     (out / "changes.json").write_text(json.dumps({"versions": changes}, indent=1))

@@ -40,20 +40,22 @@ README has the exact commands and checksums).
   Visitor views and the same Length and Text selects, and you can drop in a dataset folder of your own, or a 360
   video from your camera, to see it on the sphere (design/v0/v0.8.0.md); nothing is uploaded.
 - the help, built by Ask & Answer, with its question box first, and an ask box on the home page that takes a
-  question there. The release is pinned in `ask.lock.json` and fetched from `site/site.toml`'s `ask_base`, each
+  question there. The release is pinned in `ask.lock.json` and fetched from the site's `ask_base`, each
   file checked against the lock. `sos site --no-ask` builds without it (a fork, say): the gallery and simulator stay,
   and Help links open the docs on GitHub
 
 - **Suggest a dataset,** a form that sends a link, its licence and what it would show to the maintainer's mailbox
-  through a small API on the site's own address (`infra/lambda/suggest`), behind a honeypot and rate limits
+  through a small API on the site's own address, behind a honeypot and rate limits
   (design/v0/v0.6.0.md; `sos admin` switches whether they go there or to a
   test address, design/v0/v0.7.2.md)
 
 - **Anonymous counts** of page views and Download clicks, with no cookie or identifier, when `[site] count` is on.
-  Every five minutes a Lambda publishes them as `status/sos.json` for stevenpenza.com's dashboard, when the production
-  secret `SOS_STATUS_BUCKET` names its bucket (design/v0/v0.7.0.md)
+  Every five minutes a Lambda publishes them as `status/sos.json` for stevenpenza.com's dashboard (design/v0/v0.7.0.md)
 
-`infra/` deploys it, but only from a pushed version tag (see design/v0/v0.2.0.md).
+The site's pages, their scripts and `sos site` live here. Its deployment doesn't: the CDK stack and its API, the live
+`site.toml` and the release that deploys it are in a private repo, sos-site, which builds the site from a pinned
+sos-forge tag (design/v0/v0.9.0.md). `sos site`, `sos upload-help` and `sos admin` read `./site.toml`, so run them
+from there.
 
 Every animation also carries `labels.txt`, one line of text per frame. SOS can draw it as fixed labels around the
 sphere: set `[hud] mode = "labels"`, or switch them on from the iPad.
@@ -139,7 +141,6 @@ node --test site/js/*.test.mjs          # simulator logic
 pip install -e ".[browser]"             # once: Playwright, which drives your installed Google Chrome
 python -m pytest tests/test_browser.py  # the built site in headless Chrome, under the deployed CSP
 python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages, every download answers
-(cd infra && npm ci && npm test)        # site stack synth
 ```
 
 - Commits go straight to `main` with the subject `vX.Y.Z: <one sentence>.`
@@ -158,20 +159,18 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
   ```
   `release.yml` then runs `tools/release.sh` in the `production` environment, the same script you can run by
   hand. It refuses an unscoped or mismatched tag, then tests, builds and creates the GitHub Release.
-- **Rendered datasets go on a data release first**, so the version's site deploy can download them:
-  `sos bundle <slug>`, then `gh release create data-YYYY-MM <zips>`, then list them in `site/site.toml`. A
+- **Rendered datasets go on a data release first**, on this repo, so sos-site's deploy can download them:
+  `sos bundle <slug>`, then `gh release create data-YYYY-MM <zips>`, then list them in sos-site's `site.toml`. A
   `data-*` tag deploys nothing. Extra lengths are built with `sos build <slug> --seconds N`, bundled by the same
   `sos bundle`, and listed as `lengths = [N, ...]`. For every length and text style other than the standard one,
   `sos bundle` also writes `<version>_web.zip`: a 2048-wide H.264 preview with its `labels.txt`, which the cards and
   the simulator play. Upload those too. `sos site` refuses to deploy a download, length or preview that its release
   doesn't hold.
-- **Help's docs reach Ask & Answer only through a release.** After the site deploys, `release.sh` runs
-  `sos upload-help`, which uploads the committed docs with the pinned `corpus.py` and the `ASK_UPLOAD_KEY` secret. A
-  docs change is live on Help once its version is released.
-- **The architecture chart** for stevenpenza.com's owner page is drawn by each release after the deploy, from what CDK
-  synthesized and `infra/architecture.hand.json`, by `tools/architecture.mjs`: stevenpenza.com's generator, copied
-  byte for byte. It is uploaded to the private docs bucket and never committed (design/v0/v0.8.3.md). Change the hand
-  file when something outside the stack changes; a hand edge to a construct that's gone fails the tests.
+- **Help's docs reach Ask & Answer only through sos-site's release.** After the site deploys, it runs
+  `sos upload-help` from its checkout of the pinned tag, which uploads that tag's docs with the pinned `corpus.py`
+  and sos-site's upload key. A docs change is live on Help once a version holding it is released here and sos-site
+  moves its pin to it.
+- **The architecture chart** for stevenpenza.com's owner page is drawn and uploaded by sos-site's release.
 - **Moving to another Ask & Answer release** is deliberate, never part of a build: take `corpus.py` from the API's
   `artifacts.base`, check it against the integrity `GET /ask` lists, run
   `python3 corpus.py --project . --lock <ask_base>`, and commit the new `ask.lock.json` with the version that moves.
@@ -189,6 +188,6 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
   - **Settings:** in `.env.local`, which git ignores: `SOSFORGE_ADMIN_FROM`, `SOSFORGE_ADMIN_NAME`,
     `SOSFORGE_MAIL_BUCKET` and `SOSFORGE_MAIL_PREFIX`, and optionally `SOSFORGE_TEST_TO`.
   - **Acceptance:** when NOAA accepts a dataset, "Record catalog link" writes `noaa_catalog = "<its catalog page>"`
-    into `site/site.toml`. Commit that, and the card links it. The correspondence never enters the repo.
+    into sos-site's `site.toml`. Commit that there, and the card links it. The correspondence never enters a repo.
 
 MIT licence. Built for NOAA SOS sites, museums and science centres.

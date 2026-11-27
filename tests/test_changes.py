@@ -69,3 +69,29 @@ def test_changes_come_from_tagged_docs(tmp_path):
         ("v0.1.0", "2026-01-02", "https://example.org/releases/tag/v0.1.0")]
     assert got[0]["entries"][0]["text"].startswith("Moons") and len(got[1]["entries"]) == 2
     assert visitor_changes(tmp_path / "not-a-repo") == [] and released(tmp_path / "not-a-repo") == []
+
+
+def scratch_repo(path, tagged):
+    """Make a scratch repo whose scope docs, one per version, are tagged on the given days. Helper; not itself tested."""
+    (path / "design" / "v0").mkdir(parents=True)
+    for v, _ in tagged:
+        (path / "design" / "v0" / f"{v}.md").write_text(DOC.replace("Lunar Phases", f"From {path.name} {v}"))
+    git(path, "init", "-q")
+    git(path, "add", ".")
+    git(path, "commit", "-q", "-m", "docs", date="2026-01-01T12:00:00+00:00")
+    for v, day in tagged:
+        git(path, "tag", "-a", v, "-m", v, date=f"{day}T12:00:00+00:00")
+    return path
+
+
+def test_site_changes_merge_the_deployments(tmp_path):
+    """Checks What's new merges the deployment repo's released versions with sos-forge's, newest date first, naming the deployment's "site vX.Y.Z" with no link (its repo is private) while sos-forge's keep theirs, and that with no other repo it is sos-forge's alone. Covers site_changes against two scratch repos; sos site passes sos-site's checkout as --changes."""
+    from sosforge.site import site_changes
+    forge = scratch_repo(tmp_path / "forge", [("v0.9.0", "2026-11-26"), ("v0.8.0", "2026-11-20")])
+    deploy = scratch_repo(tmp_path / "deploy", [("v0.1.0", "2026-11-27"), ("v0.2.0", "2026-11-28")])
+    got = site_changes(forge, "https://example.org/tag/", (deploy,))
+    assert [(c["version"], c["date"], c["notes"]) for c in got] == [
+        ("site v0.2.0", "2026-11-28", ""), ("site v0.1.0", "2026-11-27", ""),
+        ("v0.9.0", "2026-11-26", "https://example.org/tag/v0.9.0"), ("v0.8.0", "2026-11-20", "https://example.org/tag/v0.8.0")]
+    assert got[0]["entries"][0]["text"].startswith("From deploy v0.2.0")
+    assert [c["version"] for c in site_changes(forge, "https://example.org/tag/")] == ["v0.9.0", "v0.8.0"]

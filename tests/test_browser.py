@@ -23,6 +23,8 @@ from sosforge import site
 from test_site import make_dataset
 
 REQUIRED = os.environ.get("SOSFORGE_BROWSER_TESTS") == "1"
+# The live site's Ask & Answer API, which ask.lock.json's release is fetched from; its settings are in sos-site.
+ASK_BASE = "https://ask.stevenpenza.com"
 try:
     from playwright.sync_api import sync_playwright
 except ImportError:
@@ -77,9 +79,9 @@ ask = { heading = "Ask about sos-forge", suggestions = 3, showHeading = false }
 
 
 def deployed_csp(ask_origin: str = "", help_pages: bool = False) -> str:
-    """Return the Content-Security-Policy CloudFront sends on site pages, or on /help/ (inline scripts allowed), from infra/lib/csp.mjs through node. Helper; not itself tested."""
+    """Return the Content-Security-Policy CloudFront sends on site pages, or on /help/ (inline scripts allowed), from site/csp.mjs (which sos-site's stack imports) through node. Helper; not itself tested."""
     args = json.dumps({"askOrigin": ask_origin, "inlineScripts": help_pages})
-    js = f"import({json.dumps((site.REPO_ROOT / 'infra' / 'lib' / 'csp.mjs').as_uri())}).then(m => process.stdout.write(m.csp({args})))"
+    js = f"import({json.dumps((site.REPO_ROOT / 'site' / 'csp.mjs').as_uri())}).then(m => process.stdout.write(m.csp({args})))"
     return subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout
 
 
@@ -149,8 +151,8 @@ def origin(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def origin_ask(tmp_path_factory):
-    """Serve the fixture site built with the real pinned Ask & Answer release, fetched from site.toml's API and checked against ask.lock.json, and yield (origin, API base); skipped when the API can't be reached, unless SOSFORGE_BROWSER_TESTS=1. Fixture; not itself tested."""
-    base = site.load_config(site.REPO_ROOT / "site" / "site.toml")["ask_base"].rstrip("/")
+    """Serve the fixture site built with the real pinned Ask & Answer release, fetched from its API ($SOSFORGE_ASK_BASE, else the live site's) and checked against ask.lock.json, and yield (origin, API base); skipped when the API can't be reached, unless SOSFORGE_BROWSER_TESTS=1. Fixture; not itself tested."""
+    base = (os.environ.get("SOSFORGE_ASK_BASE") or ASK_BASE).rstrip("/")
     try:
         root = build_fixture(tmp_path_factory.mktemp("browser_ask"), CONFIG + HELP_FRAME, ask_base=base)
     except Exception as exc:
@@ -570,9 +572,8 @@ def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
     px, where = page.evaluate(SMALLEST_TEXT)
     assert px >= 14 - 0.05, f"help after the refusal: {px}px at {where}"
     heading = page.locator(".ask-panel .ask-hd")
+    # With HELP_FRAME's showHeading = false; that the live site.toml sets it too is tested in sos-site.
     assert heading.count() == 1 and heading.evaluate("e => e.getBoundingClientRect().height") <= 1
-    import tomllib
-    assert tomllib.loads((site.REPO_ROOT / "site" / "site.toml").read_text())["help"]["ask"]["showHeading"] is False
     # Help's question box is the home page's width on a wide screen (design/v0/v0.5.4.md).
     help_width = page.locator(".ask-panel .ask-askform").evaluate("e => Math.round(e.getBoundingClientRect().width)")
     assert help_width == home_width == 720, (help_width, home_width)

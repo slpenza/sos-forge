@@ -1,6 +1,0 @@
-{
-  "app": "node bin/app.mjs",
-  "context": {
-    "@aws-cdk/core:bootstrapQualifier": "sos1"
-  }
-}

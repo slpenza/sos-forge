@@ -135,7 +135,7 @@ def cmd_site(args) -> int:
     out = Path(args.out)
     manifest = build_site(Path(args.config), out, dist=Path(args.dist) if args.dist else None,
                           ask_base="" if args.no_ask else (args.ask_base or os.environ.get("SOSFORGE_ASK_BASE")),
-                          check_downloads=not args.no_check_downloads)
+                          check_downloads=not args.no_check_downloads, changes_from=tuple(args.changes or ()))
     print(f"{out}  ({len(manifest['datasets'])} datasets)")
     if args.serve:
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(out))
@@ -207,8 +207,10 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("slug")
     p.add_argument("--dist", default="dist")
     p.set_defaults(fn=cmd_bundle)
+    # The live site's settings (site.toml) live in its deployment's private repo, sos-site (design/v0/v0.9.0.md), so
+    # site, upload-help and admin read ./site.toml: run them from that repo.
     p = sub.add_parser("site", help="build the sos.stevenpenza.com site (gallery, simulator, help, Ask)")
-    p.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "site" / "site.toml"))
+    p.add_argument("--config", default="site.toml", help="the site's settings (default ./site.toml)")
     p.add_argument("--out", default="build/site")
     p.add_argument("--dist", help="use built dataset folders from here instead of release downloads")
     p.add_argument("--ask-base", help="Ask & Answer API base (default $SOSFORGE_ASK_BASE, then site.toml's ask_base); the "
@@ -217,15 +219,17 @@ def parser() -> argparse.ArgumentParser:
                                                          "links point at the docs on GitHub")
     p.add_argument("--no-check-downloads", action="store_true",
                    help="skip checking that every download (and length) in site.toml is on its release")
+    p.add_argument("--changes", action="append", metavar="REPO",
+                   help="another repo whose released For visitors lines join What's new, unlinked (the deployment's)")
     p.add_argument("--serve", type=int, nargs="?", const=8040, help="serve the result locally on this port")
     p.set_defaults(fn=cmd_site)
     p = sub.add_parser("upload-help", help="upload the help docs to Ask & Answer with the key in $ASK_UPLOAD_KEY "
                                            "(a release does this)")
-    p.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "site" / "site.toml"))
+    p.add_argument("--config", default="site.toml", help="the site's settings (default ./site.toml)")
     p.add_argument("--ask-base", help="Ask & Answer API base (default $SOSFORGE_ASK_BASE, then site.toml's ask_base)")
     p.set_defaults(fn=cmd_upload_help)
     p = sub.add_parser("admin", help="the local page for submitting published datasets to NOAA and keeping their replies")
-    p.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "site" / "site.toml"))
+    p.add_argument("--config", default="site.toml", help="the site's settings (default ./site.toml)")
     p.add_argument("--port", type=int, default=8041,
                    help="the local port (default 8041, in sos-forge's block 8040-8049; sos site --serve uses 8040)")
     p.set_defaults(fn=cmd_admin)
