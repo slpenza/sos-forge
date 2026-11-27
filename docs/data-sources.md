@@ -28,3 +28,6 @@ It was last checked on 22 November 2026.
 - **A share-alike licence when the data requires it.** A dataset made from data under CC BY-SA, for example, is
   shared under CC BY-SA too. The dataset's README says so.
 - **OpenStreetMap's credit.** "© OpenStreetMap contributors" must stay with any image made from it.
+- **The terms, in a NOAA submission.** `sos admin`'s draft states each source's terms from `TERMS` in
+  `sosforge/noaa.py`, in the words of this table. A source added here needs a line there too, or its draft keeps a
+  `[[...]]` line and can't be sent.

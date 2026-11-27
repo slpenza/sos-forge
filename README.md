@@ -177,8 +177,8 @@ python tools/smoke.py https://sos.stevenpenza.com   # the live site: clean pages
 - **Submitting a dataset to NOAA's SOS Data Catalog** happens on `sos admin`, a page served only on 127.0.0.1:8041
   with your own AWS login, through the aws CLI.
   - **Drafts:** "Submit to NOAA" drafts the email NOAA's catalog page asks for, from the live `datasets.json`:
-    description, notable features, credits and every zip's link. You fill in its `[[...]]` line, then send it to
-    `sos.support@noaa.gov` through SES.
+    description, notable features, credits, each source's licence terms and every zip's link. You fill in its
+    `[[...]]` lines, then send it to `sos.support@noaa.gov` through SES.
   - **The record:** each email goes with a copy to the sending address. The page files that copy and every reply
     under its dataset, from the S3 prefix where that address's receipt rule stores its mail.
   - **Safety:** sending stays off until such a rule exists, so a reply can't be lost. The page can only write to

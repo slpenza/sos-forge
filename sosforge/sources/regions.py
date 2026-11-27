@@ -24,6 +24,9 @@ NATURAL_EARTH = {
 }
 OWID_URL = "https://ourworldindata.org/grapher/{slug}.csv?v=1&csvType=full&useColumnShortNames=true"
 OWID_META = "https://ourworldindata.org/grapher/{slug}.metadata.json?v=1&csvType=full&useColumnShortNames=true"
+# The credits these sources write, named so sosforge/noaa.py's TERMS can be tested against them.
+NATURAL_EARTH_CREDIT = "Natural Earth (public domain)"
+OWID_CREDIT = "Our World in Data (CC BY 4.0)"
 
 
 def rings_of(geometry: dict) -> list[np.ndarray]:
@@ -59,7 +62,7 @@ def natural_earth(opts: dict, ctx) -> RegionSet:
     path = ensure_asset(NATURAL_EARTH[scale])
     raw = path.read_bytes()
     codes, names, rings = regions_from_geojson(json.loads(raw), "ISO_A3_EH", "NAME", fallback_code="ADM0_A3")
-    return RegionSet(codes, names, rings, "Natural Earth (public domain)", "Public domain", digest_bytes(raw))
+    return RegionSet(codes, names, rings, NATURAL_EARTH_CREDIT, "Public domain", digest_bytes(raw))
 
 
 @register_source("geojson_regions")
@@ -107,7 +110,7 @@ def owid(opts: dict, ctx) -> DataTable:
     cols = table_from_csv(data, "code", "year", value)
     unit = col.get("unit") or ""
     return DataTable({**cols, "unit": np.array([unit], dtype=object)},
-                     f"{cite}; Our World in Data (CC BY 4.0)", "CC-BY-4.0", digest_bytes(data.encode()))
+                     f"{cite}; {OWID_CREDIT}", "CC-BY-4.0", digest_bytes(data.encode()))
 
 
 @register_source("table")

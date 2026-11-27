@@ -20,6 +20,24 @@ TEST_HEADER = "X-SOS-Forge-Test"               # a test send from sos admin, nev
 SUGGESTIONS = "@suggestions"                    # file_mail's key for them; "@" can't start a slug
 CATALOG_PREFIX = "https://sos.noaa.gov/"
 FILL = re.compile(r"\[\[[^\]]*\]\]")
+# Each source's terms of use, matched by a phrase its credit line always carries, in the words docs/data-sources.md
+# checked them in. A credit that matches none gets a [[...]] line, so a new source's terms are written before a send.
+TERMS = (
+    ("Global Imagery Browse Services", "NASA background imagery, via GIBS", "not copyrighted; NASA asks to be credited"),
+    ("Scientific Visualization Studio", "NASA Scientific Visualization Studio imagery", "not copyrighted; NASA asks to be credited"),
+    ("OpenStreetMap", "OpenStreetMap data",
+     "ODbL 1.0; the image is a Produced Work and keeps the credit \"© OpenStreetMap contributors\""),
+    ("Natural Earth", "Natural Earth country shapes", "public domain"),
+    ("Our World in Data", "Our World in Data", "CC BY 4.0; the data it republishes keeps its original source's terms, "
+                                          "and both are cited"),
+    ("European Commission Joint Research Centre", "GHSL data, European Commission Joint Research Centre",
+     "CC BY 4.0, © European Union; cite the dataset and its DOI"),
+    ("U.S. Geological Survey", "USGS earthquake feed", "a US Government work, in the public domain; credit the USGS"),
+    ("NOAA Space Weather Prediction Center", "NOAA SWPC OVATION forecast",
+     "a US Government work, in the public domain; credit NOAA SWPC"),
+    ("FIRMS", "NASA FIRMS active fires", "NASA data, free and open; acknowledge FIRMS and NASA's ESDIS, with a link"),
+)
+TERMS_DOC = "https://github.com/slpenza/sos-forge/blob/main/docs/data-sources.md"
 
 
 def length_text(seconds: float) -> str:
@@ -52,6 +70,16 @@ def features(d: dict) -> list[str]:
     return out
 
 
+def terms(credits: list[str]) -> list[str]:
+    """Return one line per source in a dataset's credits giving its terms of use, each source once, with a [[...]] line for each credit no known source matches, or one when there are no credits. Tested by test_noaa.py::test_draft_states_each_sources_terms and test_every_bundled_source_has_terms."""
+    out: list[str] = []
+    for c in credits:
+        line = next((f"{name}: {t}." for key, name, t in TERMS if key in c), f"[[Terms of use for: {c}]]")
+        if line not in out:
+            out.append(line)
+    return out or ["[[Terms of use for this dataset's data]]"]
+
+
 def files_of(d: dict) -> list[str]:
     """Return one line per published zip of a dataset, standard length first, each naming the file and its link. Tested by test_noaa.py::test_draft_follows_noaa_checklist."""
     seen, lines = set(), []
@@ -65,7 +93,7 @@ def files_of(d: dict) -> list[str]:
 
 
 def draft(d: dict, site_url: str, sender: dict) -> dict:
-    """Return the first email for submitting a published dataset, {to, subject, body}, laid out as NOAA's catalog page asks: description, notable features, credits and the files, with one [[...]] line left to fill in. Tested by test_noaa.py::test_draft_follows_noaa_checklist."""
+    """Return the first email for submitting a published dataset, {to, subject, body}, laid out as NOAA's catalog page asks: description, notable features, credits, each source's licence and the files, with a [[...]] line left to fill in. Tested by test_noaa.py::test_draft_follows_noaa_checklist and test_draft_states_each_sources_terms."""
     site = site_url.rstrip("/")
     sources = "; ".join(f"{s['label']} ({s['url']})" for s in d.get("sources", [])) or "; ".join(d.get("credits", []))
     body = "\n".join([
@@ -87,6 +115,10 @@ def draft(d: dict, site_url: str, sender: dict) -> dict:
         f"Contact: {sender['address']}",
         *(["Full credits, as the dataset's playlist and README carry them:", *(f"- {c}" for c in d["credits"])]
           if d.get("credits") else []),
+        "",
+        "Licences",
+        *(f"- {x}" for x in terms(d.get("credits", []))),
+        f"Every source sos-forge uses, with its terms: {TERMS_DOC}",
         "",
         "Files (each zip holds the dataset and its playlist.sos)",
         *files_of(d),

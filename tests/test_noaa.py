@@ -14,7 +14,8 @@ MOVIE = {
     "slug": "gr", "name": "Getting Richer", "kind": "movie", "width": 4096, "height": 2048, "duration_s": 40.4,
     "source_fps": 30.0,
     "playlist": {"description": "Average income per person. Credits: NASA Blue Marble; Maddison Project."},
-    "credits": ["NASA Blue Marble", "Maddison Project Database 2023 (CC BY 4.0)"],
+    "credits": ["NASA Blue Marble, via NASA Global Imagery Browse Services (GIBS), part of NASA's ESDIS",
+                "Maddison Project Database 2023; Our World in Data (CC BY 4.0)"],
     "sources": [{"label": "Maddison Project Database 2023", "url": "https://example.com/maddison"}],
     "downloads": [f("gr_4k.zip"), f("gr_4k_h264.zip")],
     "lengths": [
@@ -24,7 +25,7 @@ MOVIE = {
     ],
 }
 STILL = {"slug": "aurora", "name": "Aurora Forecast", "kind": "texture", "width": 4096, "height": 2048,
-         "playlist": {"description": "NOAA's forecast."}, "credits": ["NOAA SWPC"], "sources": [],
+         "playlist": {"description": "NOAA's forecast."}, "credits": ["NOAA Space Weather Prediction Center, OVATION aurora forecast"], "sources": [],
          "downloads": [f("aurora_4k.zip")], "lengths": []}
 
 
@@ -33,7 +34,8 @@ def test_draft_follows_noaa_checklist():
     d = noaa.draft(MOVIE, "https://sos.example.org/", SENDER)
     assert d["to"] == "sos.support@noaa.gov" and d["subject"] == "Dataset for the SOS Data Catalog: Getting Richer"
     body = d["body"]
-    for heading in ("Description", "Notable features", "Credits", "Files (each zip holds the dataset and its playlist.sos)"):
+    for heading in ("Description", "Notable features", "Credits", "Licences",
+                    "Files (each zip holds the dataset and its playlist.sos)"):
         assert f"\n{heading}\n" in body
     assert "Average income per person." in body and "Credits: NASA" not in body
     assert "- A 40 s movie at 30 fps, 4096 × 2048, in MPEG-4 Part 2" in body
@@ -41,7 +43,8 @@ def test_draft_follows_noaa_checklist():
     assert "SOS labels (labels.txt)" in body
     assert "Dataset Source: Maddison Project Database 2023 (https://example.com/maddison)" in body
     assert "Dataset Developer: Pat Maker" in body and "Contact: sos@example.org" in body
-    assert "carry them:\n- NASA Blue Marble\n- Maddison Project Database 2023 (CC BY 4.0)\n" in body
+    assert "carry them:\n- NASA Blue Marble, via NASA Global Imagery Browse Services (GIBS), part of NASA's ESDIS\n" \
+           "- Maddison Project Database 2023; Our World in Data (CC BY 4.0)\n" in body
     zips = [line for line in body.splitlines() if line.startswith("- gr_")]
     assert len(zips) == len(set(zips)) == 7 and zips[0] == f"- gr_4k.zip: {REL}/gr_4k.zip"
     assert "https://sos.example.org/simulator.html?d=gr" in body
@@ -49,8 +52,40 @@ def test_draft_follows_noaa_checklist():
     assert noaa.unfilled(body.replace(noaa.unfilled(body)[0], "The 1820s start nearly level.")) == []
     still = noaa.draft(STILL, "https://sos.example.org", SENDER)["body"]
     assert "- A still image, 4096 × 2048." in still and "movie" not in still.split("Credits")[0].split("Notable")[1]
-    assert "Dataset Source: NOAA SWPC" in still
+    assert "Dataset Source: NOAA Space Weather Prediction Center" in still
     assert [noaa.length_text(s) for s in (40.4, 60, 101, 0)] == ["40 s", "1 min", "1 min 41 s", "0 s"]
+
+
+
+def test_draft_states_each_sources_terms():
+    """Checks the draft's Licences section gives each source's terms once, even when two credits share a source, then links the terms page, and that a credit no known source matches, or a dataset without credits, leaves a [[...]] line that holds the send. Covers terms and its place in draft; whether the terms are still current is not tested (docs/data-sources.md records when they were checked)."""
+    body = noaa.draft(MOVIE, "https://sos.example.org", SENDER)["body"]
+    assert body.split("\nLicences\n")[1].split("\n\n")[0].splitlines() == [
+        "- NASA background imagery, via GIBS: not copyrighted; NASA asks to be credited.",
+        "- Our World in Data: CC BY 4.0; the data it republishes keeps its original source's terms, and both are cited.",
+        f"Every source sos-forge uses, with its terms: {noaa.TERMS_DOC}",
+    ]
+    gibs = ", via NASA Global Imagery Browse Services (GIBS), part of NASA's ESDIS"
+    assert len(noaa.terms([f"NASA Blue Marble{gibs}", f"NASA Black Marble{gibs}"])) == 1
+    odd = noaa.draft({**MOVIE, "credits": [*MOVIE["credits"], "A Local Survey"]}, "https://sos.example.org", SENDER)
+    assert "[[Terms of use for: A Local Survey]]" in noaa.unfilled(odd["body"])
+    assert noaa.terms([]) == ["[[Terms of use for this dataset's data]]"]
+
+
+def test_every_bundled_source_has_terms():
+    """Checks every credit line the bundled sources, basemaps and recipes write matches a known source's terms, so none of their submissions starts with a [[Terms ...]] line. Covers TERMS against the sources' own credit strings; a source added without terms fails here."""
+    import tomllib
+    from pathlib import Path
+
+    from sosforge import basemaps
+    from sosforge.sources import aurora, firms, ghsl, overpass, regions, usgs
+    credits = [basemaps.basemap_credit(n) for n in basemaps.BASEMAPS]
+    credits += [aurora.ATTRIBUTION, firms.ATTRIBUTION, ghsl.ATTRIBUTION, ghsl.POP_ATTRIBUTION, overpass.ATTRIBUTION,
+                usgs.ATTRIBUTION, regions.NATURAL_EARTH_CREDIT, f"Riley (2005); {regions.OWID_CREDIT}"]
+    recipes = Path(__file__).resolve().parents[1] / "recipes"
+    credits += [c for p in sorted(recipes.glob("*/recipe.toml"))
+                for c in tomllib.loads(p.read_text()).get("dataset", {}).get("credits", [])]
+    assert len(credits) >= 12 and [t for t in noaa.terms(credits) if t.startswith("[[")] == []
 
 
 def test_message_is_marked_and_threaded():
