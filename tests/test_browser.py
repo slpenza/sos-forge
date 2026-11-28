@@ -556,6 +556,9 @@ def test_home_ask_box_hands_the_question_to_help(browser, origin_ask, origin):
     look = """e => { const s = getComputedStyle(e); return [s.borderRadius, s.backgroundColor, s.borderTopColor, s.color,
       s.fontFamily, s.fontSize, s.fontWeight, s.letterSpacing, s.paddingLeft]; }"""
     assert box.locator("button").evaluate(look) == page.locator(".cta a.btn").evaluate(look)
+    height = "e => Math.round(e.getBoundingClientRect().height)"
+    heights = [x.evaluate(height) for x in (page.locator(".cta a.btn"), box.locator("input"), box.locator("button"))]
+    assert len(set(heights)) == 1, f"Read the help, the field and Ask are one height: {heights}"
     assert page.locator(".cta a.btn").all_inner_texts() == ["Read the help"]
     assert page.locator('link[href="ask/ask-panel.css"]').count() == 1
     assert problems == []
